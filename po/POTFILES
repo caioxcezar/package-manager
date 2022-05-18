@@ -1,0 +1,4 @@
+data/org.caioxcezar.packagemanager.desktop.in
+data/org.caioxcezar.packagemanager.appdata.xml.in
+data/org.caioxcezar.packagemanager.gschema.xml
+src/window.ui
