@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=package-manager
+Exec=package-manager
+Icon=org.caioxcezar.packagemanager
+Terminal=false
+Type=Application
+Categories=GTK;
+StartupNotify=true
