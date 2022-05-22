@@ -86,7 +86,7 @@ impl PackageManagerApplication {
             .version(VERSION)
             .comments("A simple package manager")
             .website_label("github")
-            .website("https://github.com/caioxcezar/")
+            .website("https://github.com/caioxcezar/package-manager")
             .authors(vec!["Caio Rezende".into()])
             .build();
 

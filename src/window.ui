@@ -13,7 +13,7 @@
           </object>
         </property>
         <child type="start">
-          <object class="GtkDropDown" id="dropdown_provider"/>
+          <object class="GtkComboBoxText" id="combobox_provider"/>
         </child>
         <child type="end">
           <object class="GtkMenuButton">
