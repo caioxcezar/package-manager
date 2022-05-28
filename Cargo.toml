@@ -7,3 +7,9 @@ edition = "2021"
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
 gtk = { version = "0.4.7", package = "gtk4" }
 
+[dependencies.adw]
+package = "libadwaita"
+version  = "0.1.1"
+
+[build-dependencies]
+gtk = { version = "0.4.7", package = "gtk4" }
