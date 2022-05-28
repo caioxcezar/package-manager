@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<schemalist gettext-domain="package-manager">
-	<schema id="org.caioxcezar.packagemanager" path="/org/caioxcezar/packagemanager/">
-	</schema>
-</schemalist>

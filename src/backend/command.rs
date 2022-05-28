@@ -1,12 +1,12 @@
 use std::io::{Error, ErrorKind};
-use std::process::{Command, Stdio};
+use std::process::Command;
 
 pub fn run(command: String) -> Result<String, Error> {
-     let output = Command::new("sh")
-            .arg("-c")
-            .arg(command)
-            .output()
-            .expect("failed to execute process");
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(command)
+        .output()
+        .expect("failed to execute process");
 
     if output.status.success() {
         Ok(String::from_utf8(output.stdout).unwrap())
