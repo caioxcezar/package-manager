@@ -1,3 +1,6 @@
+use gtk::TextBuffer;
+use secstr::SecVec;
+
 use crate::{
     backend::{command, package::Package, provider::Provider},
     messagebox,
@@ -24,6 +27,9 @@ pub fn init() -> Flatpak {
 }
 
 impl Provider for Flatpak {
+    fn is_root_required(&self) -> bool {
+        self.root_required.clone()
+    }
     fn get_name(&self) -> String {
         self.name.clone()
     }
@@ -98,15 +104,24 @@ impl Provider for Flatpak {
             self.installed = installed_package.len();
         }
     }
-    // fn install(&self, packages: Vec<Package>, output: String, error: String) -> u64 {
-    //     32
-    // }
-    // fn remove(&self, packages: Vec<Package>, output: String, error: String) -> u64 {
-    //     32
-    // }
-    // fn update(&self, packages: Vec<Package>, output: String, error: String) -> u64 {
-    //     43
-    // }
+    fn package_info(&self, package: String) -> String {
+        command::run(format!("flatpak search {}", package)).unwrap()
+    }
+    fn install(&self, _: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
+        command::run_stream(
+            format!("flatpak install {} -y", packages.join(" ")),
+            text_buffer,
+        )
+    }
+    fn remove(&self, _: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
+        command::run_stream(
+            format!("flatpak remove {} -y", packages.join(" ")),
+            text_buffer,
+        )
+    }
+    fn update(&self, _: SecVec<u8>, text_buffer: &TextBuffer) {
+        command::run_stream("flatpak update -y".to_owned(), text_buffer)
+    }
 }
 pub fn is_available() -> bool {
     let packages = command::run(String::from("flatpak --version"));

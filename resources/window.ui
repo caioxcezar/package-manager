@@ -3,7 +3,7 @@
   <requires lib="gtk" version="4.0" />
   <template class="PackageManagerWindow" parent="GtkApplicationWindow">
     <property name="default-width">600</property>
-    <property name="default-height">300</property>
+    <property name="default-height">600</property>
     <child type="titlebar">
       <object class="GtkHeaderBar" id="header_bar">
         <property name="title-widget">
@@ -35,68 +35,87 @@
       <object class="GtkBox">
         <property name="orientation">1</property>
         <child>
-          <object class="GtkScrolledWindow">
+          <object class="GtkPaned">
+            <property name="orientation">1</property>
             <child>
-              <object class="GtkTreeView" id="tree_view">
-                <property name="hexpand">true</property>
-                <property name="vexpand">true</property>
-                <property name="headers-visible">true</property>
+              <object class="GtkScrolledWindow">
                 <child>
-                  <object class="GtkTreeViewColumn" id="installed-column">
-                    <property name="title">Installed</property>
-                    <child>
-                      <object class="GtkCellRendererToggle" id="installed_renderer">
-                        <signal name="toggled" handler="handle_toggle" swapped="true" />
+                  <object class="GtkTreeView" id="tree_view">
+                    <property name="hexpand">true</property>
+                    <property name="vexpand">true</property>
+                    <property name="headers-visible">true</property>
+                    <child internal-child="selection">
+                      <object class="GtkTreeSelection" id="tree_selection">
+                        <signal name="changed" handler="treeview_selection_changed" swapped="true" />
                       </object>
-                      <attributes>
-                        <attribute name="active">0</attribute>
-                      </attributes>
                     </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkTreeViewColumn" id="repo-column">
-                    <property name="title">Repository</property>
                     <child>
-                      <object class="GtkCellRendererText" id="repo-renderer" />
-                      <attributes>
-                        <attribute name="text">1</attribute>
-                      </attributes>
+                      <object class="GtkTreeViewColumn" id="installed-column">
+                        <property name="title">Installed</property>
+                        <child>
+                          <object class="GtkCellRendererToggle" id="installed_renderer">
+                            <signal name="toggled" handler="handle_toggle" swapped="true" />
+                          </object>
+                          <attributes>
+                            <attribute name="active">0</attribute>
+                          </attributes>
+                        </child>
+                      </object>
                     </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkTreeViewColumn" id="name-column">
-                    <property name="title">Name</property>
                     <child>
-                      <object class="GtkCellRendererText" id="name-renderer" />
-                      <attributes>
-                        <attribute name="text">2</attribute>
-                      </attributes>
+                      <object class="GtkTreeViewColumn" id="repo-column">
+                        <property name="title">Repository</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="repo-renderer" />
+                          <attributes>
+                            <attribute name="text">1</attribute>
+                          </attributes>
+                        </child>
+                      </object>
                     </child>
-                  </object>
-                </child>
-                <child>
-                  <object class="GtkTreeViewColumn" id="version-column">
-                    <property name="title">Version</property>
                     <child>
-                      <object class="GtkCellRendererText" id="version-renderer" />
-                      <attributes>
-                        <attribute name="text">3</attribute>
-                      </attributes>
+                      <object class="GtkTreeViewColumn" id="name-column">
+                        <property name="title">Name</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="name-renderer" />
+                          <attributes>
+                            <attribute name="text">2</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="version-column">
+                        <property name="title">Version</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="version-renderer" />
+                          <attributes>
+                            <attribute name="text">3</attribute>
+                          </attributes>
+                        </child>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkTreeViewColumn" id="qualified-name">
+                        <property name="title">Qualified Name</property>
+                        <property name="visible">false</property>
+                        <child>
+                          <object class="GtkCellRendererText" id="qualified-renderer" />
+                          <attributes>
+                            <attribute name="text">4</attribute>
+                          </attributes>
+                        </child>
+                      </object>
                     </child>
                   </object>
                 </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkScrolledWindow">
                 <child>
-                  <object class="GtkTreeViewColumn" id="qualified-name">
-                    <property name="title">Qualified Name</property>
+                  <object class="GtkTextView" id="text_box">
                     <property name="visible">false</property>
-                    <child>
-                      <object class="GtkCellRendererText" id="qualified-renderer" />
-                      <attributes>
-                        <attribute name="text">4</attribute>
-                      </attributes>
-                    </child>
                   </object>
                 </child>
               </object>

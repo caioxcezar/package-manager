@@ -1,22 +1,5 @@
 use gtk::prelude::*;
-use gtk::traits::WidgetExt;
-
-pub fn show(title: &str, body: &str, msg_type: gtk::MessageType, buttons: gtk::ButtonsType) {
-    if gtk::init().is_err() {
-        println!("Failed to initialize GTK.");
-        return;
-    }
-
-    let dialog = gtk::MessageDialog::builder()
-        .text(title)
-        .secondary_text(body)
-        .message_type(msg_type)
-        .modal(true)
-        .buttons(buttons)
-        // .transient_for(&parent_window)
-        .build();
-    dialog.show();
-}
+use secstr::{SecStr, SecVec};
 
 pub fn info(title: &str, body: &str, callback: fn(response: gtk::ResponseType)) {
     if gtk::init().is_err() {
@@ -53,4 +36,8 @@ pub fn error(title: &str, body: &str) {
     dialog.run_async(|obj, _| {
         obj.close();
     });
+}
+
+pub fn ask_password() -> SecVec<u8> {
+    SecStr::from("<<Uma Senha segura>>")
 }
