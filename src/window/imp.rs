@@ -1,10 +1,11 @@
+use crate::backend::command;
 use crate::backend::package::PendingPackage;
 use crate::backend::providers::{self, Providers};
 use crate::messagebox;
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
 use gtk::subclass::prelude::*;
-use gtk::{glib, CompositeTemplate};
+use gtk::{glib, CompositeTemplate, TextBuffer};
 use gtk::{prelude::*, ListStore};
 use std::sync::Mutex;
 
@@ -27,6 +28,10 @@ pub struct Window {
     pub action: TemplateChild<gtk::Button>,
     #[template_child]
     pub update: TemplateChild<gtk::Button>,
+    #[template_child]
+    pub text_box: TemplateChild<gtk::TextView>,
+    #[template_child]
+    pub tree_selection: TemplateChild<gtk::TreeSelection>,
     pub providers: Mutex<Providers>,
     pub pending_packages: Mutex<Vec<PendingPackage>>,
     pub list_store: Mutex<Option<ListStore>>,
@@ -62,7 +67,7 @@ impl ObjectImpl for Window {
                 self.combobox_provider.append_text(&p);
             }
 
-            if let None = self.combobox_provider.active_text() {
+            if providers.list.len() == 0 {
                 self.update_all.set_sensitive(false);
                 self.update.set_sensitive(false);
             }
@@ -72,6 +77,22 @@ impl ObjectImpl for Window {
 }
 #[gtk::template_callbacks]
 impl Window {
+    #[template_callback]
+    fn treeview_selection_changed(&self, tree_selection: gtk::TreeSelection) {
+        if let Some((tree_model, tree_iter)) = tree_selection.selected() {
+            let package = tree_model
+                .get_value(&tree_iter, 4 as i32)
+                .get::<String>()
+                .unwrap();
+            {
+                let providers = self.providers.lock().unwrap();
+                let info = providers.package_info(package, self.combobox_text());
+                let buffer = TextBuffer::builder().text(&info).build();
+                self.text_box.set_buffer(Some(&buffer));
+                self.text_box.set_visible(true);
+            }
+        };
+    }
     #[template_callback]
     fn handle_toggle(&self, index: &str, _: gtk::CellRendererToggle) {
         let mut list_store = self.list_store.lock().unwrap();
@@ -105,7 +126,10 @@ impl Window {
     }
     #[template_callback]
     fn handle_update_all(&self, _button: gtk::Button) {
-        println!("Click update all")
+        let buffer = TextBuffer::builder().text(&"").build();
+        self.text_box.set_buffer(Some(&buffer));
+        let _ = command::run_stream("cat /home/caior/paru_list".to_owned(), &buffer);
+        self.text_box.set_visible(true);
     }
     #[template_callback]
     fn handle_action(&self, _: gtk::Button) {
@@ -147,11 +171,17 @@ impl Window {
         }
         messagebox::info("Please, confirm the changes", &text, |value| {
             if value.eq(&gtk::ResponseType::Ok) {
-                println!("Installing...");
             } else {
                 println!("Canceling...");
             }
-        })
+        });
+        let text = self.combobox_text();
+        let providers = self.providers.lock();
+        if let Ok(providers) = providers {
+            let buffer = TextBuffer::builder().text(&"").build();
+            self.text_box.set_buffer(Some(&buffer));
+            providers.update(text, &buffer);
+        }
     }
     #[template_callback]
     fn handle_combobox_changed(&self, combobox: gtk::ComboBoxText) {
@@ -168,7 +198,16 @@ impl Window {
     }
     #[template_callback]
     fn handle_update(&self, _button: gtk::Button) {
-        println!("Click update")
+        let providers = self.providers.lock();
+        if let Ok(providers) = providers {
+            let buffer = TextBuffer::builder().text(&"").build();
+            self.text_box.set_buffer(Some(&buffer));
+            providers.update(self.combobox_text(), &buffer);
+        }
+    }
+    fn combobox_text(&self) -> String {
+        let combobox_text = self.combobox_provider.active_text().unwrap();
+        String::from(combobox_text.as_str())
     }
 }
 

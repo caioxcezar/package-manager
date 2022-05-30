@@ -1,3 +1,6 @@
+use gtk::TextBuffer;
+use secstr::SecVec;
+
 use crate::{
     backend::{command, package::Package, provider::Provider},
     messagebox,
@@ -24,6 +27,9 @@ pub fn init() -> Pacman {
 }
 
 impl Provider for Pacman {
+    fn is_root_required(&self) -> bool {
+        self.root_required.clone()
+    }
     fn get_name(&self) -> String {
         self.name.clone()
     }
@@ -60,15 +66,38 @@ impl Provider for Pacman {
         self.installed = self.packages.iter().filter(|&p| p.is_installed).count();
         self.total = self.packages.len();
     }
-    // fn install(&self, packages: Vec<Package>, output: String, error: String) -> u64 {
-    //     32
-    // }
-    // fn remove(&self, packages: Vec<Package>, output: String, error: String) -> u64 {
-    //     32
-    // }
-    // fn update(&self, packages: Vec<Package>, output: String, error: String) -> u64 {
-    //     43
-    // }
+    fn package_info(&self, package: String) -> String {
+        command::run(format!("pacman -Si {}", package)).unwrap()
+    }
+    fn install(&self, password: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
+        command::run_stream(
+            format!(
+                "echo '{}' | sudo -S pacman -Syu {} --noconfirm",
+                password.to_string(),
+                packages.join(" ")
+            ),
+            text_buffer,
+        )
+    }
+    fn remove(&self, password: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
+        command::run_stream(
+            format!(
+                "echo '{}' | sudo -S pacman -Rsu {} --noconfirm",
+                password.to_string(),
+                packages.join(" ")
+            ),
+            text_buffer,
+        )
+    }
+    fn update(&self, password: SecVec<u8>, text_buffer: &TextBuffer) {
+        command::run_stream(
+            format!(
+                "echo '{}' | sudo -S pacman -Syy --noconfirm",
+                password.to_string()
+            ),
+            text_buffer,
+        )
+    }
 }
 pub fn is_available() -> bool {
     let packages = command::run(String::from("pacman --version"));
