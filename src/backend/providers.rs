@@ -84,7 +84,7 @@ impl Providers {
             if provider.is_root_required() {
                 password = messagebox::ask_password();
             }
-            provider.install(password, packages, text_buffer);
+            provider.remove(password, packages, text_buffer);
         } else {
             let text = format!("No provider with the name of {}", provider_name);
             messagebox::error("Provider not found", &text[..]);

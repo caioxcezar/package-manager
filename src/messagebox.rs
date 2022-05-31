@@ -1,11 +1,11 @@
-use gtk::prelude::*;
+use gtk::{prelude::*, ResponseType};
 use secstr::{SecStr, SecVec};
 
-pub fn info(title: &str, body: &str, callback: fn(response: gtk::ResponseType)) {
-    if gtk::init().is_err() {
-        println!("Failed to initialize GTK.");
-        return;
-    }
+pub async fn info(title: &str, body: &str) -> ResponseType {
+    // if gtk::init().is_err() {
+    //     println!("Failed to initialize GTK.");
+    //     return None;
+    // }
 
     let dialog = gtk::MessageDialog::builder()
         .text(title)
@@ -14,10 +14,10 @@ pub fn info(title: &str, body: &str, callback: fn(response: gtk::ResponseType)) 
         .modal(true)
         .buttons(gtk::ButtonsType::Ok)
         .build();
-    dialog.run_async(move |obj, response| {
-        callback(response);
-        obj.close();
-    });
+
+    let future = dialog.run_future().await;
+    dialog.close();
+    future
 }
 
 pub fn error(title: &str, body: &str) {
