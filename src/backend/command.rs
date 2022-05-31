@@ -3,6 +3,7 @@ use gtk::traits::TextBufferExt;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::process::{Command, Stdio};
 use std::thread;
+use std::time::Duration;
 pub fn run(command: String) -> Result<String, Error> {
     let output = Command::new("sh")
         .arg("-c")
@@ -21,17 +22,16 @@ pub fn run(command: String) -> Result<String, Error> {
 }
 
 pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) {
-    let mut cmd = Command::new("sh")
-        .arg("-c")
-        .arg(command)
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    let txt_buffer = text_buffer.clone();
     let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-
+    let txt_buffer = text_buffer.clone();
     thread::spawn(move || {
+        let mut cmd = Command::new("sh")
+            .arg("-c")
+            .arg(command)
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+
         let stdout = cmd.stdout.as_mut().unwrap();
         let stdout_reader = BufReader::new(stdout);
         let stdout_lines = stdout_reader.lines();

@@ -105,7 +105,8 @@ impl Provider for Flatpak {
         }
     }
     fn package_info(&self, package: String) -> String {
-        command::run(format!("flatpak search {}", package)).unwrap()
+        let response = command::run(format!("flatpak search {}", package)).unwrap();
+        response.replace("\t", "\n")
     }
     fn install(&self, _: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
         command::run_stream(

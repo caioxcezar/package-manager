@@ -1,11 +1,10 @@
-use crate::backend::command;
 use crate::backend::package::PendingPackage;
 use crate::backend::providers::{self, Providers};
 use crate::messagebox;
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
 use gtk::subclass::prelude::*;
-use gtk::{glib, CompositeTemplate, TextBuffer};
+use gtk::{glib, CompositeTemplate, ResponseType, TextBuffer};
 use gtk::{prelude::*, ListStore};
 use std::sync::Mutex;
 
@@ -14,6 +13,8 @@ use std::sync::Mutex;
 pub struct Window {
     #[template_child]
     pub header_bar: TemplateChild<gtk::HeaderBar>,
+    #[template_child]
+    pub stack: TemplateChild<gtk::Stack>,
     #[template_child]
     pub tree_view: TemplateChild<gtk::TreeView>,
     #[template_child]
@@ -32,6 +33,12 @@ pub struct Window {
     pub text_box: TemplateChild<gtk::TextView>,
     #[template_child]
     pub tree_selection: TemplateChild<gtk::TreeSelection>,
+    #[template_child]
+    pub text_command: TemplateChild<gtk::TextView>,
+    #[template_child]
+    pub info_bar: TemplateChild<gtk::InfoBar>,
+    #[template_child]
+    pub info_bar_label: TemplateChild<gtk::Label>,
     pub providers: Mutex<Providers>,
     pub pending_packages: Mutex<Vec<PendingPackage>>,
     pub list_store: Mutex<Option<ListStore>>,
@@ -126,13 +133,15 @@ impl Window {
     }
     #[template_callback]
     fn handle_update_all(&self, _button: gtk::Button) {
+        self.goto_command();
         let buffer = TextBuffer::builder().text(&"").build();
-        self.text_box.set_buffer(Some(&buffer));
-        let _ = command::run_stream("cat /home/caior/paru_list".to_owned(), &buffer);
-        self.text_box.set_visible(true);
+        self.text_command.set_buffer(Some(&buffer));
+        let providers = self.providers.lock().unwrap();
+        providers.update_all(&buffer);
+        self.show_info("Finalizado");
     }
     #[template_callback]
-    fn handle_action(&self, _: gtk::Button) {
+    async fn handle_action(&self, _: gtk::Button) {
         let mut install: Vec<String> = Vec::new();
         let mut remove: Vec<String> = Vec::new();
         self.pending_packages
@@ -146,6 +155,10 @@ impl Window {
                     remove.push(package.package_name.clone());
                 }
             });
+
+        let install_clone: Vec<String> = install.clone();
+        let remove_clone: Vec<String> = remove.clone();
+
         let mut text: String = "".to_owned();
         if install.len() > 0 {
             text = "To be installed: ".to_owned();
@@ -169,18 +182,20 @@ impl Window {
                     .unwrap()
             );
         }
-        messagebox::info("Please, confirm the changes", &text, |value| {
-            if value.eq(&gtk::ResponseType::Ok) {
-            } else {
-                println!("Canceling...");
+        let response = messagebox::info("Please, confirm the changes", &text).await;
+        if response == ResponseType::Ok {
+            let text = self.combobox_text();
+            let providers = self.providers.lock();
+            if let Ok(providers) = providers {
+                let buffer = TextBuffer::builder().text(&"").build();
+                self.text_command.set_buffer(Some(&buffer));
+                if install_clone.len() > 0 {
+                    providers.install(text.to_owned(), install_clone, &buffer);
+                }
+                if remove_clone.len() > 0 {
+                    providers.remove(text, remove_clone, &buffer);
+                }
             }
-        });
-        let text = self.combobox_text();
-        let providers = self.providers.lock();
-        if let Ok(providers) = providers {
-            let buffer = TextBuffer::builder().text(&"").build();
-            self.text_box.set_buffer(Some(&buffer));
-            providers.update(text, &buffer);
         }
     }
     #[template_callback]
@@ -200,14 +215,30 @@ impl Window {
     fn handle_update(&self, _button: gtk::Button) {
         let providers = self.providers.lock();
         if let Ok(providers) = providers {
+            self.goto_command();
             let buffer = TextBuffer::builder().text(&"").build();
-            self.text_box.set_buffer(Some(&buffer));
+            self.text_command.set_buffer(Some(&buffer));
             providers.update(self.combobox_text(), &buffer);
+            self.show_info("Finalizado");
         }
     }
     fn combobox_text(&self) -> String {
         let combobox_text = self.combobox_provider.active_text().unwrap();
         String::from(combobox_text.as_str())
+    }
+    fn show_info(&self, message: &str) {
+        let widget = self.stack.child_by_name("main_page").unwrap();
+        let stack = self.stack.clone();
+        self.info_bar.set_visible(true);
+        self.info_bar_label.set_text(message);
+        self.info_bar.connect_response(move |info_bar, _| {
+            info_bar.set_visible(false);
+            stack.set_visible_child(&widget);
+        });
+    }
+    fn goto_command(&self) {
+        let widget = self.stack.child_by_name("command_page").unwrap();
+        self.stack.set_visible_child(&widget);
     }
 }
 
