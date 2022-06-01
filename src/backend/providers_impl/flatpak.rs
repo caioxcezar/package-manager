@@ -1,10 +1,7 @@
 use gtk::TextBuffer;
 use secstr::SecVec;
 
-use crate::{
-    backend::{command, package::Package, provider::Provider},
-    messagebox,
-};
+use crate::backend::{command, package::Package, provider::Provider};
 #[derive(Clone)]
 pub struct Flatpak {
     pub name: String,
@@ -14,7 +11,7 @@ pub struct Flatpak {
     pub root_required: bool,
 }
 
-pub fn init() -> Flatpak {
+pub fn init() -> Result<Flatpak, String> {
     let mut provider = Flatpak {
         name: String::from("Flatpak"),
         packages: Vec::new(),
@@ -22,8 +19,10 @@ pub fn init() -> Flatpak {
         installed: 0,
         total: 0,
     };
-    provider.load_packages();
-    provider
+    if let Err(value) = provider.load_packages() {
+        return Err(value);
+    }
+    Ok(provider)
 }
 
 impl Provider for Flatpak {
@@ -36,15 +35,12 @@ impl Provider for Flatpak {
     fn get_packages(&self) -> Vec<Package> {
         self.packages.clone()
     }
-    fn load_packages(&mut self) {
+    fn load_packages(&mut self) -> Result<(), String> {
         self.packages.clear();
         let remotes = command::run(String::from("flatpak remotes"));
         let remotes = match remotes {
             Ok(result) => result,
-            Err(err) => {
-                messagebox::error("Erro ao carregar Flatpak", &err.to_string()[..]);
-                return;
-            }
+            Err(err) => return Err(format!("{:?}", err)),
         };
         let remotes: Vec<&str> = remotes.split('\n').collect();
 
@@ -56,10 +52,7 @@ impl Provider for Flatpak {
             let packages = command::run(format!("{} {}", "flatpak remote-ls", arr_remote[0]));
             let packages = match packages {
                 Ok(result) => result,
-                Err(err) => {
-                    messagebox::error("Erro ao carregar Flatpak", &err.to_string()[..]);
-                    return;
-                }
+                Err(err) => return Err(format!("{:?}", err)),
             };
             let packages: Vec<&str> = packages.split('\n').collect();
 
@@ -81,10 +74,7 @@ impl Provider for Flatpak {
             let packages = command::run(String::from("flatpak list"));
             let packages = match packages {
                 Ok(result) => result,
-                Err(err) => {
-                    messagebox::error("Erro ao carregar Flatpak", &err.to_string()[..]);
-                    return;
-                }
+                Err(err) => return Err(format!("{:?}", err)),
             };
             let installed_package: Vec<&str> = packages
                 .split('\n')
@@ -103,24 +93,25 @@ impl Provider for Flatpak {
             self.total = self.packages.len();
             self.installed = installed_package.len();
         }
+        Ok(())
     }
-    fn package_info(&self, package: String) -> String {
+    fn package_info(&self, package: &str) -> String {
         let response = command::run(format!("flatpak search {}", package)).unwrap();
         response.replace("\t", "\n")
     }
-    fn install(&self, _: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
+    fn install(&self, _: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
         command::run_stream(
             format!("flatpak install {} -y", packages.join(" ")),
             text_buffer,
         )
     }
-    fn remove(&self, _: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
+    fn remove(&self, _: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
         command::run_stream(
             format!("flatpak remove {} -y", packages.join(" ")),
             text_buffer,
         )
     }
-    fn update(&self, _: SecVec<u8>, text_buffer: &TextBuffer) {
+    fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) {
         command::run_stream("flatpak update -y".to_owned(), text_buffer)
     }
 }

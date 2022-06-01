@@ -1,10 +1,7 @@
 use gtk::TextBuffer;
 use secstr::SecVec;
 
-use crate::{
-    backend::{command, package::Package, provider::Provider},
-    messagebox,
-};
+use crate::backend::{command, package::Package, provider::Provider};
 #[derive(Clone)]
 pub struct Pacman {
     pub name: String,
@@ -14,7 +11,7 @@ pub struct Pacman {
     pub root_required: bool,
 }
 
-pub fn init() -> Pacman {
+pub fn init() -> Result<Pacman, String> {
     let mut provider = Pacman {
         name: String::from("Pacman"),
         packages: Vec::new(),
@@ -22,8 +19,10 @@ pub fn init() -> Pacman {
         installed: 0,
         total: 0,
     };
-    provider.load_packages();
-    provider
+    if let Err(value) = provider.load_packages() {
+        return Err(value);
+    }
+    Ok(provider)
 }
 
 impl Provider for Pacman {
@@ -36,15 +35,12 @@ impl Provider for Pacman {
     fn get_packages(&self) -> Vec<Package> {
         self.packages.clone()
     }
-    fn load_packages(&mut self) {
+    fn load_packages(&mut self) -> Result<(), String> {
         self.packages.clear();
         let packages = command::run(String::from("pacman -Sl"));
         let packages = match packages {
             Ok(result) => result,
-            Err(err) => {
-                messagebox::error("Erro ao carregar Pacman", &err.to_string()[..]);
-                return;
-            }
+            Err(err) => return Err(format!("{:?}", err)),
         };
         let packages: Vec<&str> = packages.split('\n').collect();
 
@@ -65,38 +61,33 @@ impl Provider for Pacman {
 
         self.installed = self.packages.iter().filter(|&p| p.is_installed).count();
         self.total = self.packages.len();
+        Ok(())
     }
-    fn package_info(&self, package: String) -> String {
+    fn package_info(&self, package: &str) -> String {
         command::run(format!("pacman -Si {}", package)).unwrap()
     }
-    fn install(&self, password: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
-        command::run_stream(
-            format!(
-                "echo '{}' | sudo -S pacman -Syu {} --noconfirm",
-                password.to_string(),
-                packages.join(" ")
-            ),
-            text_buffer,
-        )
+    fn install(&self, password: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
+        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
+        let command = format!(
+            "echo '{}' | sudo -S pacman -Syu {} --noconfirm",
+            password,
+            packages.join(" ")
+        );
+        command::run_stream(command, text_buffer)
     }
-    fn remove(&self, password: SecVec<u8>, packages: Vec<String>, text_buffer: &TextBuffer) {
-        command::run_stream(
-            format!(
-                "echo '{}' | sudo -S pacman -Rsu {} --noconfirm",
-                password.to_string(),
-                packages.join(" ")
-            ),
-            text_buffer,
-        )
+    fn remove(&self, password: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
+        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
+        let command = format!(
+            "echo '{}' | sudo -S pacman -Rsu {} --noconfirm",
+            password.to_string(),
+            packages.join(" ")
+        );
+        command::run_stream(command, text_buffer)
     }
-    fn update(&self, password: SecVec<u8>, text_buffer: &TextBuffer) {
-        command::run_stream(
-            format!(
-                "echo '{}' | sudo -S pacman -Syy --noconfirm",
-                password.to_string()
-            ),
-            text_buffer,
-        )
+    fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) {
+        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
+        let command = format!("echo '{}' | sudo -S pacman -Syy --noconfirm", password);
+        command::run_stream(command, text_buffer)
     }
 }
 pub fn is_available() -> bool {
