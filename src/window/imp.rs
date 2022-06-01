@@ -6,6 +6,7 @@ use glib::subclass::InitializingObject;
 use gtk::subclass::prelude::*;
 use gtk::{glib, CompositeTemplate, ResponseType, TextBuffer};
 use gtk::{prelude::*, ListStore};
+use secstr::{SecStr, SecVec};
 use std::sync::Mutex;
 
 #[derive(CompositeTemplate, Default)]
@@ -39,9 +40,9 @@ pub struct Window {
     pub info_bar: TemplateChild<gtk::InfoBar>,
     #[template_child]
     pub info_bar_label: TemplateChild<gtk::Label>,
-    pub providers: Mutex<Providers>,
-    pub pending_packages: Mutex<Vec<PendingPackage>>,
-    pub list_store: Mutex<Option<ListStore>>,
+    providers: Mutex<Providers>,
+    pending_packages: Mutex<Vec<PendingPackage>>,
+    list_store: Mutex<Option<ListStore>>,
 }
 
 #[glib::object_subclass]
@@ -67,7 +68,13 @@ impl ObjectImpl for Window {
         {
             let mut providers = self.providers.lock().unwrap();
 
-            *providers = providers::init();
+            *providers = match providers::init() {
+                Ok(value) => value,
+                Err(value) => {
+                    messagebox::error("Error while loading", &value, self.window());
+                    return;
+                }
+            };
 
             for provider in &providers.list {
                 let p = provider.get_name();
@@ -93,7 +100,18 @@ impl Window {
                 .unwrap();
             {
                 let providers = self.providers.lock().unwrap();
-                let info = providers.package_info(package, self.combobox_text());
+                let info = providers.package_info(&package, &self.combobox_text());
+                let info = match info {
+                    Ok(value) => value,
+                    Err(value) => {
+                        messagebox::error(
+                            "Error While Changing",
+                            &format!("{:?}", value),
+                            self.window(),
+                        );
+                        return;
+                    }
+                };
                 let buffer = TextBuffer::builder().text(&info).build();
                 self.text_box.set_buffer(Some(&buffer));
                 self.text_box.set_visible(true);
@@ -128,17 +146,27 @@ impl Window {
                 installed = !installed;
                 model.set_value(&iter, 0 as u32, &installed.to_value());
             }
-            _ => messagebox::error("Toggle error", "List Store not found"),
+            _ => messagebox::error("Toggle error", "List Store not found", self.window()),
         }
     }
     #[template_callback]
-    fn handle_update_all(&self, _button: gtk::Button) {
-        self.goto_command();
-        let buffer = TextBuffer::builder().text(&"").build();
-        self.text_command.set_buffer(Some(&buffer));
-        let providers = self.providers.lock().unwrap();
-        providers.update_all(&buffer);
-        self.show_info("Finalizado");
+    async fn handle_update_all(&self, _button: gtk::Button) {
+        let providers = self.providers.try_lock();
+        if let Ok(providers) = providers {
+            let mut password = None;
+            if providers.some_root_required() {
+                password = messagebox::ask_password(self.window()).await;
+            }
+            let password = match password {
+                Some(value) => value,
+                _ => return,
+            };
+            self.goto_command();
+            let buffer = TextBuffer::builder().text(&"").build();
+            self.text_command.set_buffer(Some(&buffer));
+            providers.update_all(&buffer, &password);
+            self.show_info("Finalizado"); // FIXME não esta esperando o termindo da execução
+        }
     }
     #[template_callback]
     async fn handle_action(&self, _: gtk::Button) {
@@ -182,19 +210,25 @@ impl Window {
                     .unwrap()
             );
         }
-        let response = messagebox::info("Please, confirm the changes", &text).await;
+        let response = messagebox::info("Please, confirm the changes", &text, self.window()).await;
         if response == ResponseType::Ok {
             let text = self.combobox_text();
             let providers = self.providers.lock();
             if let Ok(providers) = providers {
                 let buffer = TextBuffer::builder().text(&"").build();
                 self.text_command.set_buffer(Some(&buffer));
+                let password = match self.password(&providers).await {
+                    Some(value) => value,
+                    _ => return,
+                };
+                self.goto_command();
                 if install_clone.len() > 0 {
-                    providers.install(text.to_owned(), install_clone, &buffer);
+                    providers.install(&text, &install_clone, &buffer, &password);
                 }
                 if remove_clone.len() > 0 {
-                    providers.remove(text, remove_clone, &buffer);
+                    providers.remove(&text, &remove_clone, &buffer, &password);
                 }
+                self.show_info("Finalizado"); // FIXME não esta esperando o termindo da execução
             }
         }
     }
@@ -206,39 +240,80 @@ impl Window {
 
         pending_packages.clear();
         let combobox_text = combobox.active_text().unwrap();
-        let combobox_text = String::from(combobox_text.as_str());
-        let provider = providers.get_model(combobox_text).unwrap();
+        let combobox_text = combobox_text.as_str();
+        let provider = providers.get_model(combobox_text);
+        let provider = match provider {
+            Ok(value) => value,
+            Err(value) => {
+                messagebox::error("Error while changing provider", &value, self.window());
+                return;
+            }
+        };
         self.tree_view.set_model(Some(&provider));
         *list_store = Some(provider);
     }
     #[template_callback]
-    fn handle_update(&self, _button: gtk::Button) {
-        let providers = self.providers.lock();
+    async fn handle_update(&self, _button: gtk::Button) {
+        let providers = self.providers.try_lock();
         if let Ok(providers) = providers {
-            self.goto_command();
             let buffer = TextBuffer::builder().text(&"").build();
             self.text_command.set_buffer(Some(&buffer));
-            providers.update(self.combobox_text(), &buffer);
-            self.show_info("Finalizado");
+            let password = match self.password(&providers).await {
+                Some(value) => value,
+                _ => return,
+            };
+            self.goto_command();
+            providers.update(&self.combobox_text(), &buffer, &password);
+            self.show_info("Finalizado"); // FIXME não esta esperando o termindo da execução
         }
+    }
+    #[template_callback]
+    fn handle_search(&self, entry: gtk::SearchEntry) {
+        let value = entry.text().to_string();
+        // let mut list_store = match self.list_store.try_lock() {
+        //     Ok(value) => value,
+        //     _ => return,
+        // };
     }
     fn combobox_text(&self) -> String {
         let combobox_text = self.combobox_provider.active_text().unwrap();
-        String::from(combobox_text.as_str())
+        combobox_text.as_str().to_owned()
     }
     fn show_info(&self, message: &str) {
         let widget = self.stack.child_by_name("main_page").unwrap();
+        let search_entry = self.search_entry.clone();
+        let update = self.update.clone();
+        let combobox_provider = self.combobox_provider.clone();
         let stack = self.stack.clone();
         self.info_bar.set_visible(true);
         self.info_bar_label.set_text(message);
         self.info_bar.connect_response(move |info_bar, _| {
             info_bar.set_visible(false);
             stack.set_visible_child(&widget);
+            search_entry.set_sensitive(true);
+            update.set_sensitive(true);
+            combobox_provider.set_sensitive(true);
         });
     }
     fn goto_command(&self) {
         let widget = self.stack.child_by_name("command_page").unwrap();
         self.stack.set_visible_child(&widget);
+        self.search_entry.set_sensitive(false);
+        self.update.set_sensitive(false);
+        self.combobox_provider.set_sensitive(false);
+    }
+    fn window(&self) -> Option<gtk::Window> {
+        let search_entry = self.search_entry.clone();
+        let widget = search_entry.upcast::<gtk::Widget>();
+        widget
+            .root()
+            .map(|root| root.downcast::<gtk::Window>().unwrap())
+    }
+    async fn password(&self, providers: &Providers) -> Option<SecVec<u8>> {
+        if providers.is_root_required(&self.combobox_text()) {
+            return messagebox::ask_password(self.window()).await;
+        }
+        Some(SecStr::from(""))
     }
 }
 

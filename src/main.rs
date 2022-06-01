@@ -7,7 +7,6 @@ use application::PackageManagerApplication;
 use gtk::gio;
 use gtk::prelude::*;
 use window::Window;
-
 fn main() {
     // Register and include resources
     gio::resources_register_include!("package_manager.gresource")
