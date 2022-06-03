@@ -3,7 +3,7 @@ use gtk::traits::TextBufferExt;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::process::{Command, Stdio};
 use std::thread;
-pub fn run(command: String) -> Result<String, Error> {
+pub fn run(command: &str) -> Result<String, Error> {
     let output = Command::new("sh")
         .arg("-c")
         .arg(command)

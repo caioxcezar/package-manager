@@ -1,14 +1,14 @@
+use std::sync::Mutex;
+
 use crate::backend::package::PendingPackage;
 use crate::backend::providers::{self, Providers};
 use crate::messagebox;
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
 use gtk::subclass::prelude::*;
-use gtk::{glib, CompositeTemplate, ResponseType, TextBuffer};
+use gtk::{glib, CompositeTemplate, ResponseType, TextBuffer, TreeModelFilter};
 use gtk::{prelude::*, ListStore};
 use secstr::{SecStr, SecVec};
-use std::sync::Mutex;
-
 #[derive(CompositeTemplate, Default)]
 #[template(resource = "/org/caioxcezar/packagemanager/window.ui")]
 pub struct Window {
@@ -43,6 +43,7 @@ pub struct Window {
     providers: Mutex<Providers>,
     pending_packages: Mutex<Vec<PendingPackage>>,
     list_store: Mutex<Option<ListStore>>,
+    list_filter: Mutex<Option<TreeModelFilter>>,
 }
 
 #[glib::object_subclass]
@@ -86,7 +87,8 @@ impl ObjectImpl for Window {
                 self.update.set_sensitive(false);
             }
         }
-        self.combobox_provider.set_active(Some(0));
+        //FIXME search para de funcionar quando usa isso
+        //self.combobox_provider.set_active(Some(0));
     }
 }
 #[gtk::template_callbacks]
@@ -234,14 +236,11 @@ impl Window {
     }
     #[template_callback]
     fn handle_combobox_changed(&self, combobox: gtk::ComboBoxText) {
-        let mut pending_packages = self.pending_packages.lock().unwrap();
-        let mut list_store = self.list_store.lock().unwrap();
         let providers = self.providers.lock().unwrap();
-
-        pending_packages.clear();
         let combobox_text = combobox.active_text().unwrap();
         let combobox_text = combobox_text.as_str();
         let provider = providers.get_model(combobox_text);
+        let search = self.search_entry.clone();
         let provider = match provider {
             Ok(value) => value,
             Err(value) => {
@@ -249,8 +248,34 @@ impl Window {
                 return;
             }
         };
-        self.tree_view.set_model(Some(&provider));
-        *list_store = Some(provider);
+        let filter = TreeModelFilter::new(&provider, None);
+        self.tree_view.set_model(Some(&filter));
+        filter.set_visible_func(move |model, iter| {
+            let package = model.get_value(iter, 4 as i32).get::<String>().unwrap();
+            let value = search.text().to_string();
+            package.contains(&value)
+        });
+        {
+            let mut pending_packages = self.pending_packages.lock().unwrap();
+            let mut list_store = self.list_store.lock().unwrap();
+            *list_store = Some(provider);
+            pending_packages.clear();
+        }
+        {
+            let mut list_filter = self.list_filter.lock().unwrap();
+            *list_filter = Some(filter);
+        }
+    }
+    #[template_callback]
+    fn handle_search(&self, _entry: &gtk::SearchEntry) {
+        if let Ok(mut list_filter) = self.list_filter.try_lock() {
+            match &mut *list_filter {
+                Some(filter) => {
+                    filter.refilter();
+                }
+                _ => return,
+            };
+        }
     }
     #[template_callback]
     async fn handle_update(&self, _button: gtk::Button) {
@@ -266,14 +291,6 @@ impl Window {
             providers.update(&self.combobox_text(), &buffer, &password);
             self.show_info("Finalizado"); // FIXME não esta esperando o termindo da execução
         }
-    }
-    #[template_callback]
-    fn handle_search(&self, entry: gtk::SearchEntry) {
-        let value = entry.text().to_string();
-        // let mut list_store = match self.list_store.try_lock() {
-        //     Ok(value) => value,
-        //     _ => return,
-        // };
     }
     fn combobox_text(&self) -> String {
         let combobox_text = self.combobox_provider.active_text().unwrap();

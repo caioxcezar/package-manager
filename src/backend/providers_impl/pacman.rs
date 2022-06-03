@@ -37,7 +37,7 @@ impl Provider for Pacman {
     }
     fn load_packages(&mut self) -> Result<(), String> {
         self.packages.clear();
-        let packages = command::run(String::from("pacman -Sl"));
+        let packages = command::run("pacman -Sl");
         let packages = match packages {
             Ok(result) => result,
             Err(err) => return Err(format!("{:?}", err)),
@@ -64,7 +64,7 @@ impl Provider for Pacman {
         Ok(())
     }
     fn package_info(&self, package: &str) -> String {
-        command::run(format!("pacman -Si {}", package)).unwrap()
+        command::run(&format!("pacman -Si {}", package)).unwrap()
     }
     fn install(&self, password: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
@@ -91,7 +91,7 @@ impl Provider for Pacman {
     }
 }
 pub fn is_available() -> bool {
-    let packages = command::run(String::from("pacman --version"));
+    let packages = command::run("pacman --version");
     match packages {
         Ok(_) => true,
         Err(_) => false,

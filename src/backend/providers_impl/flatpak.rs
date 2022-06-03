@@ -15,7 +15,7 @@ pub fn init() -> Result<Flatpak, String> {
     let mut provider = Flatpak {
         name: String::from("Flatpak"),
         packages: Vec::new(),
-        root_required: true,
+        root_required: false,
         installed: 0,
         total: 0,
     };
@@ -37,7 +37,7 @@ impl Provider for Flatpak {
     }
     fn load_packages(&mut self) -> Result<(), String> {
         self.packages.clear();
-        let remotes = command::run(String::from("flatpak remotes"));
+        let remotes = command::run("flatpak remotes");
         let remotes = match remotes {
             Ok(result) => result,
             Err(err) => return Err(format!("{:?}", err)),
@@ -49,7 +49,7 @@ impl Provider for Flatpak {
             if arr_remote[0] == "Name" {
                 continue;
             }
-            let packages = command::run(format!("{} {}", "flatpak remote-ls", arr_remote[0]));
+            let packages = command::run(&format!("{} {}", "flatpak remote-ls", arr_remote[0]));
             let packages = match packages {
                 Ok(result) => result,
                 Err(err) => return Err(format!("{:?}", err)),
@@ -71,7 +71,7 @@ impl Provider for Flatpak {
                 });
             }
 
-            let packages = command::run(String::from("flatpak list"));
+            let packages = command::run("flatpak list");
             let packages = match packages {
                 Ok(result) => result,
                 Err(err) => return Err(format!("{:?}", err)),
@@ -96,7 +96,7 @@ impl Provider for Flatpak {
         Ok(())
     }
     fn package_info(&self, package: &str) -> String {
-        let response = command::run(format!("flatpak search {}", package)).unwrap();
+        let response = command::run(&format!("flatpak search {}", package)).unwrap();
         response.replace("\t", "\n")
     }
     fn install(&self, _: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
@@ -116,7 +116,7 @@ impl Provider for Flatpak {
     }
 }
 pub fn is_available() -> bool {
-    let packages = command::run(String::from("flatpak --version"));
+    let packages = command::run("flatpak --version");
     match packages {
         Ok(_) => true,
         Err(_) => false,
