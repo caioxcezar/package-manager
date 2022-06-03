@@ -28,6 +28,7 @@
         <child type="end">
           <object class="GtkButton" id="update">
             <property name="icon-name">view-refresh-symbolic</property>
+            <property name="sensitive">false</property>
             <signal name="clicked" handler="handle_update" swapped="true" />
           </object>
         </child>

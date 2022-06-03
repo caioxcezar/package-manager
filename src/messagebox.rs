@@ -1,6 +1,8 @@
 use gtk::{prelude::*, Dialog, ResponseType};
 use secstr::{SecStr, SecVec};
 
+use crate::backend::command;
+
 pub async fn info(title: &str, body: &str, window: Option<gtk::Window>) -> ResponseType {
     let mut dialog = gtk::MessageDialog::builder()
         .text(title)
@@ -34,6 +36,7 @@ pub fn error(title: &str, body: &str, window: Option<gtk::Window>) {
 }
 
 pub async fn ask_password(window: Option<gtk::Window>) -> Option<SecVec<u8>> {
+    let window_clone = window.clone();
     let mut dialog = Dialog::builder().modal(true);
     if let Some(window) = window {
         dialog = dialog.transient_for(&window);
@@ -53,18 +56,29 @@ pub async fn ask_password(window: Option<gtk::Window>) -> Option<SecVec<u8>> {
     child.append(&text);
     child.append(&password);
     child.append(&button);
-    // dialog.set_parent(&*parent);
     dialog.set_child(Some(&child));
     let dialog_clone = dialog.clone();
     button.connect_clicked(move |_| {
         dialog.response(ResponseType::Ok);
-        // dialog.close();
     });
     let response = dialog_clone.run_future().await;
-    dialog_clone.close();
     if response == ResponseType::Ok {
-        // TODO verificar se a senha está correta
-        return Some(SecStr::from(password.text().to_string()));
+        let pass = password.text().to_string();
+        let check_password = command::run(&format!("echo '{}' | sudo -S su", &pass));
+        dialog_clone.close();
+        let res = match check_password {
+            Ok(_) => Some(SecStr::from(pass)),
+            _ => {
+                error(
+                    "Wrong Password",
+                    "Please provide the currect password",
+                    window_clone,
+                );
+                return None;
+            }
+        };
+        let _ = command::run("sudo -k");
+        return res;
     }
     None
 }
