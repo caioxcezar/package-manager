@@ -6,11 +6,11 @@ edition = "2021"
 [dependencies]
 secstr = "0.5.0"
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
-gtk = { version = "0.4.7", package = "gtk4" }
+gtk = { version = "0.4.8", package = "gtk4" }
 
 [dependencies.adw]
 package = "libadwaita"
 version  = "0.1.1"
 
 [build-dependencies]
-gtk = { version = "0.4.7", package = "gtk4" }
+gtk = { version = "0.4.8", package = "gtk4" }

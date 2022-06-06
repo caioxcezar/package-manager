@@ -2,7 +2,8 @@ use gtk::glib;
 use gtk::traits::TextBufferExt;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::process::{Command, Stdio};
-use std::thread;
+use std::thread::{self, JoinHandle};
+
 pub fn run(command: &str) -> Result<String, Error> {
     let output = Command::new("sh")
         .arg("-c")
@@ -20,22 +21,25 @@ pub fn run(command: &str) -> Result<String, Error> {
     }
 }
 
-pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) {
+pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) -> JoinHandle<bool> {
     let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     let txt_buffer = text_buffer.clone();
-    thread::spawn(move || {
+    let tr = thread::spawn(move || {
         let mut cmd = Command::new("sh")
             .arg("-c")
             .arg(command)
             .stdout(Stdio::piped())
             .spawn()
             .unwrap();
-
         let stdout = cmd.stdout.as_mut().unwrap();
         let stdout_reader = BufReader::new(stdout);
         let stdout_lines = stdout_reader.lines();
         for line in stdout_lines {
             let _ = tx.send(format!("{}\n", line.unwrap()));
+        }
+        match cmd.wait() {
+            Ok(value) => value.success(),
+            _ => false,
         }
     });
 
@@ -44,4 +48,5 @@ pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) {
         txt_buffer.insert(&mut text_iter, &text);
         glib::Continue(true)
     });
+    tr
 }
