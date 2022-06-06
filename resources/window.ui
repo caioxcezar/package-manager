@@ -62,9 +62,7 @@
                               <object class="GtkTreeViewColumn" id="installed-column">
                                 <property name="title">Installed</property>
                                 <child>
-                                  <object class="GtkCellRendererToggle" id="installed_renderer">
-                                    <signal name="toggled" handler="handle_toggle" swapped="true" />
-                                  </object>
+                                  <object class="GtkCellRendererToggle" id="installed_renderer" />
                                   <attributes>
                                     <attribute name="active">0</attribute>
                                   </attributes>

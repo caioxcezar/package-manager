@@ -1,13 +1,12 @@
 use std::sync::Mutex;
 
-use crate::backend::package::PendingPackage;
 use crate::backend::providers::{self, Providers};
 use crate::messagebox;
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
+use gtk::prelude::*;
 use gtk::subclass::prelude::*;
-use gtk::{glib, CompositeTemplate, ResponseType, TextBuffer, TreeModelFilter};
-use gtk::{prelude::*, ListStore};
+use gtk::{glib, CompositeTemplate, TextBuffer, TreeModelFilter};
 use secstr::{SecStr, SecVec};
 use std::thread::{self, JoinHandle};
 #[derive(CompositeTemplate, Default)]
@@ -23,8 +22,6 @@ pub struct Window {
     pub search_entry: TemplateChild<gtk::SearchEntry>,
     #[template_child]
     pub combobox_provider: TemplateChild<gtk::ComboBoxText>,
-    #[template_child]
-    pub installed_renderer: TemplateChild<gtk::CellRendererToggle>,
     #[template_child]
     pub update_all: TemplateChild<gtk::Button>,
     #[template_child]
@@ -42,8 +39,6 @@ pub struct Window {
     #[template_child]
     pub info_bar_label: TemplateChild<gtk::Label>,
     providers: Mutex<Providers>,
-    pending_packages: Mutex<Vec<PendingPackage>>,
-    list_store: Mutex<Option<ListStore>>,
     list_filter: Mutex<Option<TreeModelFilter>>,
 }
 
@@ -67,7 +62,6 @@ impl ObjectImpl for Window {
     fn constructed(&self, obj: &Self::Type) {
         // Call "constructed" on parent
         self.parent_constructed(obj);
-        // self.search_entry.set_search_delay(Some(400));
         {
             let mut providers = self.providers.lock().unwrap();
 
@@ -90,61 +84,40 @@ impl ObjectImpl for Window {
             }
         }
         //FIXME search para de funcionar quando usa isso
-        self.combobox_provider.set_active(Some(0));
+        //self.combobox_provider.set_active(Some(0));
     }
 }
 #[gtk::template_callbacks]
 impl Window {
     #[template_callback]
     fn treeview_selection_changed(&self, tree_selection: gtk::TreeSelection) {
-        if let Some((tree_model, tree_iter)) = tree_selection.selected() {
-            let package = tree_model
-                .get_value(&tree_iter, 4 as i32)
-                .get::<String>()
-                .unwrap();
-            {
-                let providers = self.providers.lock().unwrap();
-                let info = providers.package_info(&package, &self.combobox_text());
-                let info = match info {
-                    Ok(value) => value,
-                    Err(value) => {
-                        messagebox::error(
-                            "Error While Changing",
-                            &format!("{:?}", value),
-                            self.window(),
-                        );
-                        return;
-                    }
-                };
-                let buffer = TextBuffer::builder().text(&info).build();
-                self.text_box.set_buffer(Some(&buffer));
-                self.text_box.set_visible(true);
-            }
-        };
-    }
-    #[template_callback]
-    fn handle_toggle(&self, index: &str, _: gtk::CellRendererToggle) {
-        if let Some((model, iter)) = self.tree_selection.selected() {
-            let mut pending_packages = self.pending_packages.lock().unwrap();
-            let mut installed = model.get_value(&iter, 0 as i32).get::<bool>().unwrap();
-            let package_name = model.get_value(&iter, 4 as i32).get::<String>().unwrap();
-            let mut add = true;
-            for i in 0..pending_packages.len() {
-                if pending_packages[i].package_name.eq(&package_name) {
-                    pending_packages.remove(i);
-                    add = false;
-                    break;
+        if let Some((model, iter)) = tree_selection.selected() {
+            let package = model.get_value(&iter, 4 as i32).get::<String>().unwrap();
+            let providers = self.providers.lock().unwrap();
+            let info = providers.package_info(&package, &self.combobox_text());
+            let info = match info {
+                Ok(value) => value,
+                Err(value) => {
+                    messagebox::error(
+                        "Error While Changing",
+                        &format!("{:?}", value),
+                        self.window(),
+                    );
+                    return;
                 }
+            };
+            let buffer = TextBuffer::builder().text(&info).build();
+            self.text_box.set_buffer(Some(&buffer));
+            self.text_box.set_visible(true);
+
+            let installed = model.get_value(&iter, 0 as i32).get::<bool>().unwrap();
+
+            if installed {
+                self.action.set_label("Remove");
+            } else {
+                self.action.set_label("Install");
             }
-            if add {
-                pending_packages.push(PendingPackage {
-                    is_installing: !installed,
-                    package_name: package_name,
-                });
-            }
-            self.action.set_sensitive(pending_packages.len().gt(&0));
-            installed = !installed;
-            //model.set_value(&iter, 0 as u32, &installed.to_value());
+            self.action.set_sensitive(true);
         };
     }
     #[template_callback]
@@ -162,79 +135,35 @@ impl Window {
             self.goto_command();
             let buffer = TextBuffer::builder().text(&"").build();
             self.text_command.set_buffer(Some(&buffer));
-            let res = providers.update_all(&buffer, &password);
-            if res {
-                self.info_bar_label.set_text("Successfully finished");
-            } else {
-                self.info_bar_label.set_text("Finished with error");
-            }
+            providers.update_all(&buffer, &password);
+            self.info_bar_label.set_text("Finished");
             self.info_bar.set_visible(true);
         }
     }
     #[template_callback]
-    async fn handle_action(&self, _: gtk::Button) {
-        let mut install: Vec<String> = Vec::new();
-        let mut remove: Vec<String> = Vec::new();
-        self.pending_packages
-            .lock()
-            .unwrap()
-            .iter()
-            .for_each(|package| {
-                if package.is_installing {
-                    install.push(package.package_name.clone());
-                } else {
-                    remove.push(package.package_name.clone());
-                }
-            });
-
-        let install_clone: Vec<String> = install.clone();
-        let remove_clone: Vec<String> = remove.clone();
-
-        let mut text: String = "".to_owned();
-        if install.len() > 0 {
-            text = "To be installed: ".to_owned();
-            text = format!(
-                "{} {}",
-                text,
-                install
-                    .into_iter()
-                    .reduce(|a, b| format!("{} {}", a, b))
-                    .unwrap()
-            );
-        }
-        if remove.len() > 0 {
-            text = format!("{} {}", text, "\nTo be removed: ");
-            text = format!(
-                "{} {}",
-                text,
-                remove
-                    .into_iter()
-                    .reduce(|a, b| format!("{} {}", a, b))
-                    .unwrap()
-            );
-        }
-        let response = messagebox::info("Please, confirm the changes", &text, self.window()).await;
-        if response == ResponseType::Ok {
-            let text = self.combobox_text();
+    async fn handle_action(&self, button: gtk::Button) {
+        if let Some((tree_model, tree_iter)) = self.tree_view.selection().selected() {
+            let provider_name = self.combobox_text();
+            let package = tree_model
+                .get_value(&tree_iter, 4 as i32)
+                .get::<String>()
+                .unwrap();
+            let buffer = TextBuffer::builder().text(&"").build();
+            self.goto_command();
+            let action = button.label().unwrap();
             let providers = self.providers.lock();
             if let Ok(providers) = providers {
-                let buffer = TextBuffer::builder().text(&"").build();
                 self.text_command.set_buffer(Some(&buffer));
                 let password = match self.password(&providers).await {
                     Some(value) => value,
                     _ => return,
                 };
-                self.goto_command();
-                if install_clone.len() > 0 {
-                    let handle = providers.install(&text, &install_clone, &buffer, &password);
-                    handle.join().unwrap();
-                }
-                if remove_clone.len() > 0 {
-                    let handle = providers.remove(&text, &remove_clone, &buffer, &password);
-                    handle.join().unwrap();
-                }
-                self.info_bar.set_visible(true);
-                self.info_bar_label.set_text("Açoes finalizadas. ");
+                let handle = match action.as_str() {
+                    "Install" => providers.install(&provider_name, &package, &buffer, &password),
+                    "Remove" => providers.remove(&provider_name, &package, &buffer, &password),
+                    _ => return,
+                };
+                self.command_finished(handle);
             }
         }
     }
@@ -260,12 +189,6 @@ impl Window {
             let value = search.text().to_string();
             package.contains(&value)
         });
-        {
-            let mut pending_packages = self.pending_packages.lock().unwrap();
-            let mut list_store = self.list_store.lock().unwrap();
-            *list_store = Some(provider);
-            pending_packages.clear();
-        }
         {
             let mut list_filter = self.list_filter.lock().unwrap();
             *list_filter = Some(filter);

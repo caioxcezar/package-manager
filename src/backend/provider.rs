@@ -14,13 +14,13 @@ pub trait Provider {
     fn install(
         &self,
         password: &SecVec<u8>,
-        packages: &Vec<String>,
+        package: &str,
         text_buffer: &TextBuffer,
     ) -> JoinHandle<bool>;
     fn remove(
         &self,
         password: &SecVec<u8>,
-        packages: &Vec<String>,
+        package: &str,
         text_buffer: &TextBuffer,
     ) -> JoinHandle<bool>;
     fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool>;
