@@ -2,8 +2,11 @@ use super::{
     provider::Provider,
     providers_impl::{flatpak, pacman},
 };
+use gtk::glib;
 use gtk::{prelude::*, TextBuffer};
 use secstr::SecVec;
+use std::thread;
+use std::thread::JoinHandle;
 #[derive(Default)]
 pub struct Providers {
     pub list: Vec<Box<dyn Provider>>,
@@ -45,7 +48,12 @@ impl Providers {
         }
         Ok(model)
     }
-    pub fn update(&self, provider_name: &str, text_buffer: &TextBuffer, password: &SecVec<u8>) {
+    pub fn update(
+        &self,
+        provider_name: &str,
+        text_buffer: &TextBuffer,
+        password: &SecVec<u8>,
+    ) -> JoinHandle<bool> {
         let provider = self.get_provider(&provider_name).unwrap();
         provider.update(&password, text_buffer)
     }
@@ -63,7 +71,7 @@ impl Providers {
         packages: &Vec<String>,
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
-    ) {
+    ) -> JoinHandle<bool> {
         let provider = self.get_provider(&provider_name).unwrap();
         provider.install(password, packages, text_buffer)
     }
@@ -73,14 +81,12 @@ impl Providers {
         packages: &Vec<String>,
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
-    ) {
+    ) -> JoinHandle<bool> {
         let provider = self.get_provider(provider_name).unwrap();
-        provider.remove(&password, packages, text_buffer);
+        provider.remove(&password, packages, text_buffer)
     }
-    pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) {
-        for provider in &self.list {
-            provider.update(password, text_buffer);
-        }
+    pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) -> bool {
+        false
     }
     pub fn is_root_required(&self, provider_name: &str) -> bool {
         let provider = self.get_provider(provider_name).unwrap();

@@ -1,3 +1,5 @@
+use std::thread::JoinHandle;
+
 use gtk::TextBuffer;
 use secstr::SecVec;
 
@@ -66,7 +68,12 @@ impl Provider for Pacman {
     fn package_info(&self, package: &str) -> String {
         command::run(&format!("pacman -Si {}", package)).unwrap()
     }
-    fn install(&self, password: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
+    fn install(
+        &self,
+        password: &SecVec<u8>,
+        packages: &Vec<String>,
+        text_buffer: &TextBuffer,
+    ) -> JoinHandle<bool> {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
         let command = format!(
             "echo '{}' | sudo -S pacman -Syu {} --noconfirm",
@@ -75,7 +82,12 @@ impl Provider for Pacman {
         );
         command::run_stream(command, text_buffer)
     }
-    fn remove(&self, password: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
+    fn remove(
+        &self,
+        password: &SecVec<u8>,
+        packages: &Vec<String>,
+        text_buffer: &TextBuffer,
+    ) -> JoinHandle<bool> {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
         let command = format!(
             "echo '{}' | sudo -S pacman -Rsu {} --noconfirm",
@@ -84,7 +96,7 @@ impl Provider for Pacman {
         );
         command::run_stream(command, text_buffer)
     }
-    fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) {
+    fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
         let command = format!("echo '{}' | sudo -S pacman -Syy --noconfirm", password);
         command::run_stream(command, text_buffer)

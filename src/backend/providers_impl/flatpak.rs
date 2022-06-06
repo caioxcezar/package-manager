@@ -1,3 +1,5 @@
+use std::thread::JoinHandle;
+
 use gtk::TextBuffer;
 use secstr::SecVec;
 
@@ -99,19 +101,29 @@ impl Provider for Flatpak {
         let response = command::run(&format!("flatpak search {}", package)).unwrap();
         response.replace("\t", "\n")
     }
-    fn install(&self, _: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
+    fn install(
+        &self,
+        _: &SecVec<u8>,
+        packages: &Vec<String>,
+        text_buffer: &TextBuffer,
+    ) -> JoinHandle<bool> {
         command::run_stream(
             format!("flatpak install {} -y", packages.join(" ")),
             text_buffer,
         )
     }
-    fn remove(&self, _: &SecVec<u8>, packages: &Vec<String>, text_buffer: &TextBuffer) {
+    fn remove(
+        &self,
+        _: &SecVec<u8>,
+        packages: &Vec<String>,
+        text_buffer: &TextBuffer,
+    ) -> JoinHandle<bool> {
         command::run_stream(
             format!("flatpak remove {} -y", packages.join(" ")),
             text_buffer,
         )
     }
-    fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) {
+    fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
         command::run_stream("flatpak update -y".to_owned(), text_buffer)
     }
 }

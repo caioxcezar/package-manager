@@ -9,6 +9,7 @@ use gtk::subclass::prelude::*;
 use gtk::{glib, CompositeTemplate, ResponseType, TextBuffer, TreeModelFilter};
 use gtk::{prelude::*, ListStore};
 use secstr::{SecStr, SecVec};
+use std::thread::{self, JoinHandle};
 #[derive(CompositeTemplate, Default)]
 #[template(resource = "/org/caioxcezar/packagemanager/window.ui")]
 pub struct Window {
@@ -66,6 +67,7 @@ impl ObjectImpl for Window {
     fn constructed(&self, obj: &Self::Type) {
         // Call "constructed" on parent
         self.parent_constructed(obj);
+        // self.search_entry.set_search_delay(Some(400));
         {
             let mut providers = self.providers.lock().unwrap();
 
@@ -88,7 +90,7 @@ impl ObjectImpl for Window {
             }
         }
         //FIXME search para de funcionar quando usa isso
-        //self.combobox_provider.set_active(Some(0));
+        self.combobox_provider.set_active(Some(0));
     }
 }
 #[gtk::template_callbacks]
@@ -122,34 +124,28 @@ impl Window {
     }
     #[template_callback]
     fn handle_toggle(&self, index: &str, _: gtk::CellRendererToggle) {
-        let mut list_store = self.list_store.lock().unwrap();
-        match &mut *list_store {
-            Some(model) => {
-                let mut pending_packages = self.pending_packages.lock().unwrap();
-                let path = gtk::TreePath::from_string(index).unwrap();
-                let iter = model.iter(&path).unwrap();
-                let mut installed = model.get_value(&iter, 0 as i32).get::<bool>().unwrap();
-                let package_name = model.get_value(&iter, 4 as i32).get::<String>().unwrap();
-                let mut add = true;
-                for i in 0..pending_packages.len() {
-                    if pending_packages[i].package_name.eq(&package_name) {
-                        pending_packages.remove(i);
-                        add = false;
-                        break;
-                    }
+        if let Some((model, iter)) = self.tree_selection.selected() {
+            let mut pending_packages = self.pending_packages.lock().unwrap();
+            let mut installed = model.get_value(&iter, 0 as i32).get::<bool>().unwrap();
+            let package_name = model.get_value(&iter, 4 as i32).get::<String>().unwrap();
+            let mut add = true;
+            for i in 0..pending_packages.len() {
+                if pending_packages[i].package_name.eq(&package_name) {
+                    pending_packages.remove(i);
+                    add = false;
+                    break;
                 }
-                if add {
-                    pending_packages.push(PendingPackage {
-                        is_installing: !installed,
-                        package_name: package_name,
-                    });
-                }
-                self.action.set_sensitive(pending_packages.len().gt(&0));
-                installed = !installed;
-                model.set_value(&iter, 0 as u32, &installed.to_value());
             }
-            _ => messagebox::error("Toggle error", "List Store not found", self.window()),
-        }
+            if add {
+                pending_packages.push(PendingPackage {
+                    is_installing: !installed,
+                    package_name: package_name,
+                });
+            }
+            self.action.set_sensitive(pending_packages.len().gt(&0));
+            installed = !installed;
+            //model.set_value(&iter, 0 as u32, &installed.to_value());
+        };
     }
     #[template_callback]
     async fn handle_update_all(&self, _button: gtk::Button) {
@@ -166,8 +162,13 @@ impl Window {
             self.goto_command();
             let buffer = TextBuffer::builder().text(&"").build();
             self.text_command.set_buffer(Some(&buffer));
-            providers.update_all(&buffer, &password);
-            self.show_info("Finalizado"); // FIXME não esta esperando o termindo da execução
+            let res = providers.update_all(&buffer, &password);
+            if res {
+                self.info_bar_label.set_text("Successfully finished");
+            } else {
+                self.info_bar_label.set_text("Finished with error");
+            }
+            self.info_bar.set_visible(true);
         }
     }
     #[template_callback]
@@ -225,12 +226,15 @@ impl Window {
                 };
                 self.goto_command();
                 if install_clone.len() > 0 {
-                    providers.install(&text, &install_clone, &buffer, &password);
+                    let handle = providers.install(&text, &install_clone, &buffer, &password);
+                    handle.join().unwrap();
                 }
                 if remove_clone.len() > 0 {
-                    providers.remove(&text, &remove_clone, &buffer, &password);
+                    let handle = providers.remove(&text, &remove_clone, &buffer, &password);
+                    handle.join().unwrap();
                 }
-                self.show_info("Finalizado"); // FIXME não esta esperando o termindo da execução
+                self.info_bar.set_visible(true);
+                self.info_bar_label.set_text("Açoes finalizadas. ");
             }
         }
     }
@@ -239,6 +243,7 @@ impl Window {
         let providers = self.providers.lock().unwrap();
         let combobox_text = combobox.active_text().unwrap();
         let combobox_text = combobox_text.as_str();
+        self.update.set_sensitive(true);
         let provider = providers.get_model(combobox_text);
         let search = self.search_entry.clone();
         let provider = match provider {
@@ -288,28 +293,41 @@ impl Window {
                 _ => return,
             };
             self.goto_command();
-            providers.update(&self.combobox_text(), &buffer, &password);
-            self.show_info("Finalizado"); // FIXME não esta esperando o termindo da execução
+            let handle = providers.update(&self.combobox_text(), &buffer, &password);
+            self.command_finished(handle);
         }
+    }
+    #[template_callback]
+    fn handle_info_bar_response(&self, _: i32) {
+        let widget = self.stack.child_by_name("main_page").unwrap();
+        self.info_bar.set_visible(false);
+        self.stack.set_visible_child(&widget);
+        self.search_entry.set_sensitive(true);
+        self.update.set_sensitive(true);
+        self.combobox_provider.set_sensitive(true);
     }
     fn combobox_text(&self) -> String {
         let combobox_text = self.combobox_provider.active_text().unwrap();
         combobox_text.as_str().to_owned()
     }
-    fn show_info(&self, message: &str) {
-        let widget = self.stack.child_by_name("main_page").unwrap();
-        let search_entry = self.search_entry.clone();
-        let update = self.update.clone();
-        let combobox_provider = self.combobox_provider.clone();
-        let stack = self.stack.clone();
-        self.info_bar.set_visible(true);
-        self.info_bar_label.set_text(message);
-        self.info_bar.connect_response(move |info_bar, _| {
-            info_bar.set_visible(false);
-            stack.set_visible_child(&widget);
-            search_entry.set_sensitive(true);
-            update.set_sensitive(true);
-            combobox_provider.set_sensitive(true);
+    fn command_finished(&self, handle: JoinHandle<bool>) {
+        let info_bar = self.info_bar.clone();
+        let info_bar_label = self.info_bar_label.clone();
+
+        let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+        thread::spawn(move || {
+            let res = handle.join().expect("deu erro");
+            if res {
+                let _ = tx.send("Finalizado com sucesso!");
+            } else {
+                let _ = tx.send("Finalizado com erro");
+            }
+        });
+
+        rx.attach(None, move |res| {
+            info_bar.set_visible(true);
+            info_bar_label.set_text(res);
+            glib::Continue(false)
         });
     }
     fn goto_command(&self) {
