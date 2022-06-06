@@ -3,22 +3,6 @@ use secstr::{SecStr, SecVec};
 
 use crate::backend::command;
 
-pub async fn info(title: &str, body: &str, window: Option<gtk::Window>) -> ResponseType {
-    let mut dialog = gtk::MessageDialog::builder()
-        .text(title)
-        .secondary_text(body)
-        .message_type(gtk::MessageType::Info)
-        .modal(true)
-        .buttons(gtk::ButtonsType::Ok);
-    if let Some(window) = window {
-        dialog = dialog.transient_for(&window);
-    }
-    let dialog = dialog.build();
-    let future = dialog.run_future().await;
-    dialog.close();
-    future
-}
-
 pub fn error(title: &str, body: &str, window: Option<gtk::Window>) {
     let mut dialog = gtk::MessageDialog::builder()
         .text(title)

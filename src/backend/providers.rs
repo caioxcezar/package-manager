@@ -2,10 +2,8 @@ use super::{
     provider::Provider,
     providers_impl::{flatpak, pacman},
 };
-use gtk::glib;
 use gtk::{prelude::*, TextBuffer};
 use secstr::SecVec;
-use std::thread;
 use std::thread::JoinHandle;
 #[derive(Default)]
 pub struct Providers {
@@ -68,25 +66,27 @@ impl Providers {
     pub fn install(
         &self,
         provider_name: &str,
-        packages: &Vec<String>,
+        package: &str,
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
         let provider = self.get_provider(&provider_name).unwrap();
-        provider.install(password, packages, text_buffer)
+        provider.install(password, package, text_buffer)
     }
     pub fn remove(
         &self,
         provider_name: &str,
-        packages: &Vec<String>,
+        package: &str,
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
         let provider = self.get_provider(provider_name).unwrap();
-        provider.remove(&password, packages, text_buffer)
+        provider.remove(&password, package, text_buffer)
     }
-    pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) -> bool {
-        false
+    pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) {
+        for package in &self.list {
+            let _ = package.update(password, text_buffer).join(); //TODO join na main thread vai travar a aplicação ate a conclusão da execução
+        }
     }
     pub fn is_root_required(&self, provider_name: &str) -> bool {
         let provider = self.get_provider(provider_name).unwrap();

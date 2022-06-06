@@ -71,34 +71,33 @@ impl Provider for Pacman {
     fn install(
         &self,
         password: &SecVec<u8>,
-        packages: &Vec<String>,
+        package: &str,
         text_buffer: &TextBuffer,
     ) -> JoinHandle<bool> {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
         let command = format!(
             "echo '{}' | sudo -S pacman -Syu {} --noconfirm",
-            password,
-            packages.join(" ")
+            password, package
         );
         command::run_stream(command, text_buffer)
     }
     fn remove(
         &self,
         password: &SecVec<u8>,
-        packages: &Vec<String>,
+        package: &str,
         text_buffer: &TextBuffer,
     ) -> JoinHandle<bool> {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
         let command = format!(
             "echo '{}' | sudo -S pacman -Rsu {} --noconfirm",
             password.to_string(),
-            packages.join(" ")
+            package
         );
         command::run_stream(command, text_buffer)
     }
     fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        let command = format!("echo '{}' | sudo -S pacman -Syy --noconfirm", password);
+        let command = format!("echo '{}' | sudo -S pacman -Syu --noconfirm", password);
         command::run_stream(command, text_buffer)
     }
 }
