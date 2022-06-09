@@ -136,7 +136,7 @@ impl Window {
             let buffer = TextBuffer::builder().text(&"").build();
             self.text_command.set_buffer(Some(&buffer));
             providers.update_all(&buffer, &password);
-            self.info_bar_label.set_text("Finished");
+            self.info_bar_label.set_text("Finished"); //TODO mensagem sempre visivel
             self.info_bar.set_visible(true);
         }
     }
@@ -239,7 +239,7 @@ impl Window {
 
         let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
         thread::spawn(move || {
-            let res = handle.join().expect("deu erro");
+            let res = handle.join().unwrap();
             if res {
                 let _ = tx.send("Finalizado com sucesso!");
             } else {

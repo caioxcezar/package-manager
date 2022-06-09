@@ -2,9 +2,9 @@ use super::{
     provider::Provider,
     providers_impl::{flatpak, pacman},
 };
-use gtk::{prelude::*, TextBuffer};
+use gtk::{glib, prelude::*, TextBuffer};
 use secstr::SecVec;
-use std::thread::JoinHandle;
+use std::thread::{self, JoinHandle};
 #[derive(Default)]
 pub struct Providers {
     pub list: Vec<Box<dyn Provider>>,
@@ -84,9 +84,11 @@ impl Providers {
         provider.remove(&password, package, text_buffer)
     }
     pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) {
+        let mut packages_name = Vec::new();
         for package in &self.list {
-            let _ = package.update(password, text_buffer).join(); //TODO join na main thread vai travar a aplicação ate a conclusão da execução
+            packages_name.push(package.get_name());
         }
+        inner_update_all(&mut packages_name, text_buffer, password);
     }
     pub fn is_root_required(&self, provider_name: &str) -> bool {
         let provider = self.get_provider(provider_name).unwrap();
@@ -117,4 +119,40 @@ pub fn init() -> Result<Providers, String> {
         return Ok(prov);
     }
     Err(errors)
+}
+
+fn get_provider(provider_name: &str) -> Option<Box<dyn Provider>> {
+    match provider_name {
+        "Pacman" => Some(Box::new(pacman::init().unwrap())),
+        "Flatpak" => Some(Box::new(flatpak::init().unwrap())),
+        &_ => None,
+    }
+}
+
+fn inner_update_all(
+    provider_names: &mut Vec<String>,
+    text_buffer: &TextBuffer,
+    password: &SecVec<u8>,
+) {
+    if provider_names.len() <= 0 {
+        return;
+    }
+    let provider_name = provider_names.remove(0);
+    let provider = get_provider(&provider_name).unwrap();
+    let handle = provider.update(&password, &text_buffer);
+
+    let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+    thread::spawn(move || {
+        let _ = handle.join().unwrap();
+        let _ = tx.send(());
+    });
+
+    let text_buffer_clone = text_buffer.clone();
+    let password_clone = password.clone();
+    let mut provider_names = provider_names.clone();
+
+    rx.attach(None, move |_| {
+        let _ = inner_update_all(&mut provider_names, &text_buffer_clone, &password_clone);
+        glib::Continue(false)
+    });
 }
