@@ -135,6 +135,8 @@ fn inner_update_all(
     password: &SecVec<u8>,
 ) {
     if provider_names.len() <= 0 {
+        let mut text_iter = text_buffer.end_iter();
+        text_buffer.insert(&mut text_iter, ":::: Updated All ::::");
         return;
     }
     let provider_name = provider_names.remove(0);
