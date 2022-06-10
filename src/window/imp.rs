@@ -1,5 +1,3 @@
-use std::cell::RefCell;
-
 use crate::backend::providers::{self, Providers};
 use crate::messagebox;
 use adw::subclass::prelude::*;
@@ -8,6 +6,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{glib, CompositeTemplate, TextBuffer, TreeModelFilter};
 use secstr::{SecStr, SecVec};
+use std::cell::RefCell;
 use std::thread::{self, JoinHandle};
 #[derive(CompositeTemplate, Default)]
 #[template(resource = "/org/caioxcezar/packagemanager/window.ui")]

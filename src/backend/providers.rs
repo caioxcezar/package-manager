@@ -1,6 +1,6 @@
 use super::{
     provider::Provider,
-    providers_impl::{flatpak, pacman},
+    providers_impl::{flatpak, pacman, paru},
 };
 use gtk::{glib, prelude::*, TextBuffer};
 use secstr::SecVec;
@@ -115,6 +115,12 @@ pub fn init() -> Result<Providers, String> {
             Err(value) => errors.push_str(&value),
         }
     }
+    if paru::is_available() {
+        match paru::init() {
+            Ok(value) => prov.list.push(Box::new(value)),
+            Err(value) => errors.push_str(&value),
+        }
+    }
     if "".to_owned().eq(&errors) {
         return Ok(prov);
     }
@@ -125,6 +131,7 @@ fn get_provider(provider_name: &str) -> Option<Box<dyn Provider>> {
     match provider_name {
         "Pacman" => Some(Box::new(pacman::init().unwrap())),
         "Flatpak" => Some(Box::new(flatpak::init().unwrap())),
+        "Paru" => Some(Box::new(paru::init().unwrap())),
         &_ => None,
     }
 }
