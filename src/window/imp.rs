@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::cell::RefCell;
 
 use crate::backend::providers::{self, Providers};
 use crate::messagebox;
@@ -38,8 +38,8 @@ pub struct Window {
     pub info_bar: TemplateChild<gtk::InfoBar>,
     #[template_child]
     pub info_bar_label: TemplateChild<gtk::Label>,
-    providers: Mutex<Providers>,
-    list_filter: Mutex<Option<TreeModelFilter>>,
+    providers: RefCell<Providers>,
+    list_filter: RefCell<Option<TreeModelFilter>>,
 }
 
 #[glib::object_subclass]
@@ -63,9 +63,7 @@ impl ObjectImpl for Window {
         // Call "constructed" on parent
         self.parent_constructed(obj);
         {
-            let mut providers = self.providers.lock().unwrap();
-
-            *providers = match providers::init() {
+            let providers = match providers::init() {
                 Ok(value) => value,
                 Err(value) => {
                     messagebox::error("Error while loading", &value, self.window());
@@ -82,6 +80,7 @@ impl ObjectImpl for Window {
                 self.update_all.set_sensitive(false);
                 self.update.set_sensitive(false);
             }
+            self.providers.replace(providers);
         }
         //FIXME search para de funcionar quando usa isso
         //self.combobox_provider.set_active(Some(0));
@@ -93,7 +92,7 @@ impl Window {
     fn treeview_selection_changed(&self, tree_selection: gtk::TreeSelection) {
         if let Some((model, iter)) = tree_selection.selected() {
             let package = model.get_value(&iter, 4 as i32).get::<String>().unwrap();
-            let providers = self.providers.lock().unwrap();
+            let providers = self.providers.borrow();
             let info = providers.package_info(&package, &self.combobox_text());
             let info = match info {
                 Ok(value) => value,
@@ -122,36 +121,34 @@ impl Window {
     }
     #[template_callback]
     async fn handle_update_all(&self, _button: gtk::Button) {
-        let providers = self.providers.try_lock();
-        if let Ok(providers) = providers {
-            let mut password = None;
-            if providers.some_root_required() {
-                password = messagebox::ask_password(self.window()).await;
-            }
-            let password = match password {
-                Some(value) => value,
-                _ => return,
-            };
-            self.goto_command();
-
-            let buffer = TextBuffer::builder().text(&"").build();
-            let info_bar_label = self.info_bar_label.clone();
-            let info_bar = self.info_bar.clone();
-
-            let _ = buffer.connect_changed(move |buff| {
-                let start = buff.iter_at_line(buff.line_count() - 1).unwrap();
-                let end = buff.end_iter();
-                let line = buff.text(&start, &end, false);
-                let line = line.as_str();
-                if line.contains(":::: Updated All ::::") {
-                    info_bar_label.set_text("Finished");
-                    info_bar.set_visible(true);
-                }
-            });
-
-            self.text_command.set_buffer(Some(&buffer));
-            providers.update_all(&buffer, &password);
+        let providers = self.providers.borrow();
+        let mut password = None;
+        if providers.some_root_required() {
+            password = messagebox::ask_password(self.window()).await;
         }
+        let password = match password {
+            Some(value) => value,
+            _ => return,
+        };
+        self.goto_command();
+
+        let buffer = TextBuffer::builder().text(&"").build();
+        let info_bar_label = self.info_bar_label.clone();
+        let info_bar = self.info_bar.clone();
+
+        let _ = buffer.connect_changed(move |buff| {
+            let start = buff.iter_at_line(buff.line_count() - 1).unwrap();
+            let end = buff.end_iter();
+            let line = buff.text(&start, &end, false);
+            let line = line.as_str();
+            if line.contains(":::: Updated All ::::") {
+                info_bar_label.set_text("Finished");
+                info_bar.set_visible(true);
+            }
+        });
+
+        self.text_command.set_buffer(Some(&buffer));
+        providers.update_all(&buffer, &password);
     }
     #[template_callback]
     async fn handle_action(&self, button: gtk::Button) {
@@ -164,25 +161,23 @@ impl Window {
             let buffer = TextBuffer::builder().text(&"").build();
             self.goto_command();
             let action = button.label().unwrap();
-            let providers = self.providers.lock();
-            if let Ok(providers) = providers {
-                self.text_command.set_buffer(Some(&buffer));
-                let password = match self.password(&providers).await {
-                    Some(value) => value,
-                    _ => return,
-                };
-                let handle = match action.as_str() {
-                    "Install" => providers.install(&provider_name, &package, &buffer, &password),
-                    "Remove" => providers.remove(&provider_name, &package, &buffer, &password),
-                    _ => return,
-                };
-                self.command_finished(handle);
-            }
+            let providers = self.providers.borrow();
+            self.text_command.set_buffer(Some(&buffer));
+            let password = match self.password(&providers).await {
+                Some(value) => value,
+                _ => return,
+            };
+            let handle = match action.as_str() {
+                "Install" => providers.install(&provider_name, &package, &buffer, &password),
+                "Remove" => providers.remove(&provider_name, &package, &buffer, &password),
+                _ => return,
+            };
+            self.command_finished(handle);
         }
     }
     #[template_callback]
     fn handle_combobox_changed(&self, combobox: gtk::ComboBoxText) {
-        let providers = self.providers.lock().unwrap();
+        let providers = self.providers.borrow();
         let combobox_text = combobox.active_text().unwrap();
         let combobox_text = combobox_text.as_str();
         self.update.set_sensitive(true);
@@ -202,14 +197,11 @@ impl Window {
             let value = search.text().to_string();
             package.contains(&value)
         });
-        {
-            let mut list_filter = self.list_filter.lock().unwrap();
-            *list_filter = Some(filter);
-        }
+        self.list_filter.replace(Some(filter));
     }
     #[template_callback]
     fn handle_search(&self, _entry: &gtk::SearchEntry) {
-        if let Ok(mut list_filter) = self.list_filter.try_lock() {
+        if let Ok(mut list_filter) = self.list_filter.try_borrow_mut() {
             match &mut *list_filter {
                 Some(filter) => {
                     filter.refilter();
@@ -220,18 +212,16 @@ impl Window {
     }
     #[template_callback]
     async fn handle_update(&self, _button: gtk::Button) {
-        let providers = self.providers.try_lock();
-        if let Ok(providers) = providers {
-            let buffer = TextBuffer::builder().text(&"").build();
-            self.text_command.set_buffer(Some(&buffer));
-            let password = match self.password(&providers).await {
-                Some(value) => value,
-                _ => return,
-            };
-            self.goto_command();
-            let handle = providers.update(&self.combobox_text(), &buffer, &password);
-            self.command_finished(handle);
-        }
+        let providers = self.providers.borrow();
+        let buffer = TextBuffer::builder().text(&"").build();
+        self.text_command.set_buffer(Some(&buffer));
+        let password = match self.password(&providers).await {
+            Some(value) => value,
+            _ => return,
+        };
+        self.goto_command();
+        let handle = providers.update(&self.combobox_text(), &buffer, &password);
+        self.command_finished(handle);
     }
     #[template_callback]
     fn handle_info_bar_response(&self, _: i32) {
@@ -241,6 +231,10 @@ impl Window {
         self.search_entry.set_sensitive(true);
         self.update.set_sensitive(true);
         self.combobox_provider.set_sensitive(true);
+    }
+    #[template_callback]
+    fn handle_focused(&self) {
+        self.combobox_provider.set_active(Some(0));
     }
     fn combobox_text(&self) -> String {
         let combobox_text = self.combobox_provider.active_text().unwrap();
