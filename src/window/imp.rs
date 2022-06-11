@@ -81,8 +81,10 @@ impl ObjectImpl for Window {
             }
             self.providers.replace(providers);
         }
-        //FIXME search para de funcionar quando usa isso
-        //self.combobox_provider.set_active(Some(0));
+        let combobox_provider = self.combobox_provider.clone();
+        glib::source::idle_add_local_once(move || {
+            combobox_provider.set_active(Some(0));
+        });
     }
 }
 #[gtk::template_callbacks]
@@ -181,7 +183,6 @@ impl Window {
         let combobox_text = combobox_text.as_str();
         self.update.set_sensitive(true);
         let provider = providers.get_model(combobox_text);
-        let search = self.search_entry.clone();
         let provider = match provider {
             Ok(value) => value,
             Err(value) => {
@@ -190,23 +191,24 @@ impl Window {
             }
         };
         let filter = TreeModelFilter::new(&provider, None);
-        self.tree_view.set_model(Some(&filter));
+        let search = self.search_entry.clone();
         filter.set_visible_func(move |model, iter| {
+            let value = search.text();
+            let value = value.as_str();
             let package = model.get_value(iter, 4 as i32).get::<String>().unwrap();
-            let value = search.text().to_string();
-            package.contains(&value)
+            package.contains(value)
         });
+        self.tree_view.set_model(Some(&filter));
         self.list_filter.replace(Some(filter));
     }
     #[template_callback]
-    fn handle_search(&self, _entry: &gtk::SearchEntry) {
-        if let Ok(mut list_filter) = self.list_filter.try_borrow_mut() {
-            match &mut *list_filter {
-                Some(filter) => {
-                    filter.refilter();
-                }
+    fn handle_search(&self, _search: &gtk::SearchEntry) {
+        if let Ok(mut filter) = self.list_filter.try_borrow_mut() {
+            let list_filter = match &mut *filter {
+                Some(value) => value,
                 _ => return,
             };
+            list_filter.refilter();
         }
     }
     #[template_callback]
