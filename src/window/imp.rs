@@ -118,7 +118,7 @@ impl Window {
                 self.action.set_label("Install");
             }
             self.action.set_sensitive(true);
-        };
+        }
     }
     #[template_callback]
     async fn handle_update_all(&self, _button: gtk::Button) {
@@ -203,12 +203,15 @@ impl Window {
     }
     #[template_callback]
     fn handle_search(&self, _search: &gtk::SearchEntry) {
+        self.tree_selection.unselect_all();
+        self.tree_selection.set_mode(gtk::SelectionMode::None);
         if let Ok(mut filter) = self.list_filter.try_borrow_mut() {
             let list_filter = match &mut *filter {
                 Some(value) => value,
                 _ => return,
             };
             list_filter.refilter();
+            self.tree_selection.set_mode(gtk::SelectionMode::Single);
         }
     }
     #[template_callback]
