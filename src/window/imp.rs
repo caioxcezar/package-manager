@@ -62,16 +62,10 @@ impl ObjectImpl for Window {
         // Call "constructed" on parent
         self.parent_constructed(obj);
         {
-            let providers = match providers::init() {
-                Ok(value) => value,
-                Err(value) => {
-                    messagebox::error("Error while loading", &value, self.window());
-                    return;
-                }
-            };
+            let providers = providers::init();
 
             for provider in &providers.list {
-                let p = provider.get_name();
+                let p = provider.name();
                 self.combobox_provider.append_text(&p);
             }
 
@@ -132,7 +126,8 @@ impl Window {
             _ => return,
         };
         self.goto_command();
-
+        let combobox_provider = self.combobox_provider.clone();
+        let u32_provider = self.combobox_provider.active();
         let buffer = TextBuffer::builder().text(&"").build();
         let info_bar_label = self.info_bar_label.clone();
         let info_bar = self.info_bar.clone();
@@ -143,6 +138,7 @@ impl Window {
             let line = buff.text(&start, &end, false);
             let line = line.as_str();
             if line.contains(":::: Updated All ::::") {
+                combobox_provider.set_active(u32_provider);
                 info_bar_label.set_text("Finished");
                 info_bar.set_visible(true);
             }
@@ -178,28 +174,29 @@ impl Window {
     }
     #[template_callback]
     fn handle_combobox_changed(&self, combobox: gtk::ComboBoxText) {
-        let providers = self.providers.borrow();
-        let combobox_text = combobox.active_text().unwrap();
-        let combobox_text = combobox_text.as_str();
-        self.update.set_sensitive(true);
-        let provider = providers.get_model(combobox_text);
-        let provider = match provider {
-            Ok(value) => value,
-            Err(value) => {
-                messagebox::error("Error while changing provider", &value, self.window());
-                return;
-            }
-        };
-        let filter = TreeModelFilter::new(&provider, None);
-        let search = self.search_entry.clone();
-        filter.set_visible_func(move |model, iter| {
-            let value = search.text();
-            let value = value.as_str();
-            let package = model.get_value(iter, 4 as i32).get::<String>().unwrap();
-            package.contains(value)
-        });
-        self.tree_view.set_model(Some(&filter));
-        self.list_filter.replace(Some(filter));
+        if let Some(combobox_text) = combobox.active_text() {
+            let mut providers = self.providers.borrow_mut();
+            let combobox_text = combobox_text.as_str();
+            self.update.set_sensitive(true);
+            let provider = providers.model(combobox_text);
+            let provider = match provider {
+                Ok(value) => value,
+                Err(value) => {
+                    messagebox::error("Error while changing provider", &value, self.window());
+                    return;
+                }
+            };
+            let filter = TreeModelFilter::new(&provider, None);
+            let search = self.search_entry.clone();
+            filter.set_visible_func(move |model, iter| {
+                let value = search.text();
+                let value = value.as_str();
+                let package = model.get_value(iter, 4 as i32).get::<String>().unwrap();
+                package.contains(value)
+            });
+            self.tree_view.set_model(Some(&filter));
+            self.list_filter.replace(Some(filter));
+        }
     }
     #[template_callback]
     fn handle_search(&self, _search: &gtk::SearchEntry) {
@@ -223,8 +220,9 @@ impl Window {
             Some(value) => value,
             _ => return,
         };
+        let str_prd = self.combobox_text();
         self.goto_command();
-        let handle = providers.update(&self.combobox_text(), &buffer, &password);
+        let handle = providers.update(&str_prd, &buffer, &password);
         self.command_finished(handle);
     }
     #[template_callback]
@@ -245,9 +243,11 @@ impl Window {
         combobox_text.as_str().to_owned()
     }
     fn command_finished(&self, handle: JoinHandle<bool>) {
+        let combobox_provider = self.combobox_provider.clone();
+        let u32_provider = self.combobox_provider.active();
         let info_bar = self.info_bar.clone();
         let info_bar_label = self.info_bar_label.clone();
-
+        combobox_provider.set_active(None);
         let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
         thread::spawn(move || {
             let res = handle.join().unwrap();
@@ -257,10 +257,10 @@ impl Window {
                 let _ = tx.send("Finalizado com erro");
             }
         });
-
         rx.attach(None, move |res| {
             info_bar.set_visible(true);
             info_bar_label.set_text(res);
+            combobox_provider.set_active(u32_provider);
             glib::Continue(false)
         });
     }

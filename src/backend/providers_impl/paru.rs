@@ -13,28 +13,30 @@ pub struct Paru {
     pub root_required: bool,
 }
 
-pub fn init() -> Result<Paru, String> {
-    let mut provider = Paru {
+pub fn init() -> Paru {
+    Paru {
         name: String::from("Paru"),
         packages: Vec::new(),
         root_required: true,
         installed: 0,
         total: 0,
-    };
-    if let Err(value) = provider.load_packages() {
-        return Err(value);
     }
-    Ok(provider)
 }
 
 impl Provider for Paru {
+    fn installed(&self) -> usize {
+        self.installed
+    }
+    fn total(&self) -> usize {
+        self.total
+    }
     fn is_root_required(&self) -> bool {
         self.root_required.clone()
     }
-    fn get_name(&self) -> String {
+    fn name(&self) -> String {
         self.name.clone()
     }
-    fn get_packages(&self) -> Vec<Package> {
+    fn packages(&self) -> Vec<Package> {
         self.packages.clone()
     }
     fn load_packages(&mut self) -> Result<(), String> {

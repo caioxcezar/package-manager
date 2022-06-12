@@ -13,28 +13,30 @@ pub struct Flatpak {
     pub root_required: bool,
 }
 
-pub fn init() -> Result<Flatpak, String> {
-    let mut provider = Flatpak {
+pub fn init() -> Flatpak {
+    Flatpak {
         name: String::from("Flatpak"),
         packages: Vec::new(),
         root_required: false,
         installed: 0,
         total: 0,
-    };
-    if let Err(value) = provider.load_packages() {
-        return Err(value);
     }
-    Ok(provider)
 }
 
 impl Provider for Flatpak {
+    fn installed(&self) -> usize {
+        self.installed
+    }
+    fn total(&self) -> usize {
+        self.total
+    }
     fn is_root_required(&self) -> bool {
         self.root_required.clone()
     }
-    fn get_name(&self) -> String {
+    fn name(&self) -> String {
         self.name.clone()
     }
-    fn get_packages(&self) -> Vec<Package> {
+    fn packages(&self) -> Vec<Package> {
         self.packages.clone()
     }
     fn load_packages(&mut self) -> Result<(), String> {

@@ -11,21 +11,29 @@ pub struct Providers {
 }
 impl Providers {
     /// Tecnicamente impossível voltar None
-    fn get_provider(&self, provider_name: &str) -> Option<&Box<dyn Provider>> {
+    fn provider(&self, provider_name: &str) -> Option<&Box<dyn Provider>> {
         for prov in &self.list {
-            if provider_name.eq(&prov.get_name()) {
+            if provider_name.eq(&prov.name()) {
                 return Some(prov);
             }
         }
         None
     }
-    pub fn get_model(&self, name: &str) -> Result<gtk::ListStore, String> {
-        let provider = self.get_provider(&name);
+    pub fn model(&mut self, name: &str) -> Result<gtk::ListStore, String> {
+        let mut provider = None;
+        for prov in &mut self.list {
+            if name.eq(&prov.name()) {
+                provider = Some(prov);
+            }
+        }
         let provider = match provider {
             Some(value) => value,
             _ => return Err("Provider not found. ".to_owned()),
         };
-        let packages = provider.get_packages();
+        if let Err(value) = provider.load_packages() {
+            return Err(format!("Error while loading packages. {}", value));
+        }
+        let packages = provider.packages();
         let model = gtk::ListStore::new(&[
             bool::static_type(),
             String::static_type(),
@@ -52,11 +60,11 @@ impl Providers {
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
-        let provider = self.get_provider(&provider_name).unwrap();
+        let provider = self.provider(&provider_name).unwrap();
         provider.update(&password, text_buffer)
     }
     pub fn package_info(&self, provider_name: &str, provider: &str) -> Result<String, String> {
-        let provider = self.get_provider(provider);
+        let provider = self.provider(provider);
         let provider = match provider {
             Some(value) => value,
             _ => return Err("Provider not found".to_owned()),
@@ -70,7 +78,7 @@ impl Providers {
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
-        let provider = self.get_provider(&provider_name).unwrap();
+        let provider = self.provider(&provider_name).unwrap();
         provider.install(password, package, text_buffer)
     }
     pub fn remove(
@@ -80,18 +88,18 @@ impl Providers {
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
-        let provider = self.get_provider(provider_name).unwrap();
+        let provider = self.provider(provider_name).unwrap();
         provider.remove(&password, package, text_buffer)
     }
     pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) {
         let mut packages_name = Vec::new();
         for package in &self.list {
-            packages_name.push(package.get_name());
+            packages_name.push(package.name());
         }
         inner_update_all(&mut packages_name, text_buffer, password);
     }
     pub fn is_root_required(&self, provider_name: &str) -> bool {
-        let provider = self.get_provider(provider_name).unwrap();
+        let provider = self.provider(provider_name).unwrap();
         provider.is_root_required()
     }
     pub fn some_root_required(&self) -> bool {
@@ -100,42 +108,27 @@ impl Providers {
             .any(|value: &Box<dyn Provider>| value.is_root_required())
     }
 }
-pub fn init() -> Result<Providers, String> {
-    let mut errors = "".to_owned();
+pub fn init() -> Providers {
     let mut prov = Providers { list: Vec::new() };
     if pacman::is_available() {
-        match pacman::init() {
-            Ok(value) => prov.list.push(Box::new(value)),
-            Err(value) => errors = value,
-        }
+        prov.list.push(Box::new(pacman::init()));
     }
     if flatpak::is_available() {
-        match flatpak::init() {
-            Ok(value) => prov.list.push(Box::new(value)),
-            Err(value) => errors.push_str(&value),
-        }
+        prov.list.push(Box::new(flatpak::init()));
     }
     if paru::is_available() {
-        match paru::init() {
-            Ok(value) => prov.list.push(Box::new(value)),
-            Err(value) => errors.push_str(&value),
-        }
+        prov.list.push(Box::new(paru::init()));
     }
-    if "".to_owned().eq(&errors) {
-        return Ok(prov);
-    }
-    Err(errors)
+    prov
 }
-
-fn get_provider(provider_name: &str) -> Option<Box<dyn Provider>> {
+fn provider(provider_name: &str) -> Option<Box<dyn Provider>> {
     match provider_name {
-        "Pacman" => Some(Box::new(pacman::init().unwrap())),
-        "Flatpak" => Some(Box::new(flatpak::init().unwrap())),
-        "Paru" => Some(Box::new(paru::init().unwrap())),
+        "Pacman" => Some(Box::new(pacman::init())),
+        "Flatpak" => Some(Box::new(flatpak::init())),
+        "Paru" => Some(Box::new(paru::init())),
         &_ => None,
     }
 }
-
 fn inner_update_all(
     provider_names: &mut Vec<String>,
     text_buffer: &TextBuffer,
@@ -147,7 +140,7 @@ fn inner_update_all(
         return;
     }
     let provider_name = provider_names.remove(0);
-    let provider = get_provider(&provider_name).unwrap();
+    let provider = provider(&provider_name).unwrap();
     let handle = provider.update(&password, &text_buffer);
 
     let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
