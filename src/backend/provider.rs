@@ -7,9 +7,9 @@ use crate::backend::package::Package;
 
 pub trait Provider {
     fn load_packages(&mut self) -> Result<(), String>;
-    fn get_name(&self) -> String;
+    fn name(&self) -> String;
     fn is_root_required(&self) -> bool;
-    fn get_packages(&self) -> Vec<Package>;
+    fn packages(&self) -> Vec<Package>;
     fn package_info(&self, package: &str) -> String;
     fn install(
         &self,
@@ -24,4 +24,6 @@ pub trait Provider {
         text_buffer: &TextBuffer,
     ) -> JoinHandle<bool>;
     fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool>;
+    fn installed(&self) -> usize;
+    fn total(&self) -> usize;
 }
