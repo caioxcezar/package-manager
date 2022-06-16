@@ -50,7 +50,7 @@ impl Provider for Flatpak {
 
         for str_remote in remotes {
             let arr_remote: Vec<&str> = str_remote.split('\t').collect();
-            if arr_remote[0] == "Name" {
+            if arr_remote[0] == "Name" || arr_remote[0].trim() == "" {
                 continue;
             }
             let packages = command::run(&format!("{} {}", "flatpak remote-ls", arr_remote[0]));
