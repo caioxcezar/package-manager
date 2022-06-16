@@ -2,9 +2,9 @@ use crate::backend::providers::{self, Providers};
 use crate::messagebox;
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
-use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{glib, CompositeTemplate, TextBuffer, TreeModelFilter};
+use gtk::{prelude::*, TreeModelSort};
 use secstr::{SecStr, SecVec};
 use std::cell::RefCell;
 use std::thread::{self, JoinHandle};
@@ -156,7 +156,6 @@ impl Window {
                 .get::<String>()
                 .unwrap();
             let buffer = TextBuffer::builder().text(&"").build();
-            self.goto_command();
             let action = button.label().unwrap();
             let providers = self.providers.borrow();
             self.text_command.set_buffer(Some(&buffer));
@@ -164,6 +163,7 @@ impl Window {
                 Some(value) => value,
                 _ => return,
             };
+            self.goto_command();
             let handle = match action.as_str() {
                 "Install" => providers.install(&provider_name, &package, &buffer, &password),
                 "Remove" => providers.remove(&provider_name, &package, &buffer, &password),
@@ -187,6 +187,7 @@ impl Window {
                 }
             };
             let filter = TreeModelFilter::new(&provider, None);
+            let sort = TreeModelSort::with_model(&filter);
             let search = self.search_entry.clone();
             filter.set_visible_func(move |model, iter| {
                 let value = search.text();
@@ -194,7 +195,7 @@ impl Window {
                 let package = model.get_value(iter, 4 as i32).get::<String>().unwrap();
                 package.contains(value)
             });
-            self.tree_view.set_model(Some(&filter));
+            self.tree_view.set_model(Some(&sort));
             self.list_filter.replace(Some(filter));
         }
     }
