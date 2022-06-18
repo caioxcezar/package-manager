@@ -45,6 +45,7 @@
                 <child>
                   <object class="GtkPaned">
                     <property name="orientation">1</property>
+                    <property name="position">400</property>
                     <child>
                       <object class="GtkScrolledWindow">
                         <child>
