@@ -126,15 +126,18 @@ impl Window {
             _ => return,
         };
         self.goto_command();
+
         let combobox_provider = self.combobox_provider.clone();
-        let u32_provider = self.combobox_provider.active();
-        let buffer = TextBuffer::builder().text(&"").build();
         let info_bar_label = self.info_bar_label.clone();
         let info_bar = self.info_bar.clone();
+        let text_command = self.text_command.clone();
+
+        let u32_provider = self.combobox_provider.active();
+        let buffer = TextBuffer::builder().text(&"").build();
 
         let _ = buffer.connect_changed(move |buff| {
             let start = buff.iter_at_line(buff.line_count() - 1).unwrap();
-            let end = buff.end_iter();
+            let mut end = buff.end_iter();
             let line = buff.text(&start, &end, false);
             let line = line.as_str();
             if line.contains(":::: Updated All ::::") {
@@ -142,6 +145,8 @@ impl Window {
                 info_bar_label.set_text("Finished");
                 info_bar.set_visible(true);
             }
+
+            text_command.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
         });
 
         self.text_command.set_buffer(Some(&buffer));
