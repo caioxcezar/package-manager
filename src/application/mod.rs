@@ -34,11 +34,14 @@ impl PackageManagerApplication {
     }
 
     fn show_about(&self) {
+        let img = gtk::Image::new();
+        img.set_from_resource(Some("/org/caioxcezar/packagemanager/package_manager.svg"));
+        let paintable = img.paintable().unwrap();
         let window = self.active_window().unwrap();
         let dialog = gtk::AboutDialog::builder()
             .transient_for(&window)
             .modal(true)
-            .logo_icon_name("package_manager")
+            .logo(&paintable)
             .program_name("Package Manager")
             .version(constants::VERSION)
             .comments("A simple package manager")
