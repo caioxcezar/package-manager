@@ -6,11 +6,11 @@ use secstr::SecVec;
 use crate::backend::{command, package::Package, provider::Provider};
 #[derive(Clone)]
 pub struct Flatpak {
-    pub name: String,
-    pub packages: Vec<Package>,
-    pub installed: usize,
-    pub total: usize,
-    pub root_required: bool,
+    name: String,
+    packages: Vec<Package>,
+    installed: usize,
+    total: usize,
+    root_required: bool,
 }
 
 pub fn init() -> Flatpak {
