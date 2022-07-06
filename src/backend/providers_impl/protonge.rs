@@ -1,6 +1,9 @@
 use crate::backend::{api, command, package::Package, provider::Provider};
+use gtk::glib;
+use gtk::traits::TextBufferExt;
 use serde::Deserialize;
-
+use std::fs;
+use std::thread;
 pub struct ProtonGE {
     name: String,
     packages: Vec<Package>,
@@ -41,21 +44,17 @@ pub fn init() -> ProtonGE {
 
 impl Provider for ProtonGE {
     fn load_packages(&mut self) -> Result<(), String> {
-        let home = command::run("echo $HOME");
-        let home = match home {
-            Ok(value) => value,
-            Err(value) => {
-                return Err(value.to_string());
+        let proton_location = self.proton_location();
+        let proton_dir = fs::read_dir(&proton_location).unwrap();
+        let mut proton = Vec::<String>::new();
+        for dir in proton_dir {
+            let entry = dir.unwrap();
+            let file_type = entry.file_type().unwrap();
+            if file_type.is_dir() {
+                let name = entry.file_name().to_str().unwrap().to_owned();
+                proton.push(name);
             }
-        };
-        let home = format!("{}/.local/share/Steam/compatibilitytools.d/", home.trim());
-        let proton = command::run(&format!("ls '{}'", home));
-        let proton = match proton {
-            Ok(value) => value,
-            Err(value) => {
-                return Err(value.to_string());
-            }
-        };
+        }
         let resp = api::get::<Vec<ApiResponse>>(&self.endpoint);
         self.packages_description = match resp {
             Ok(value) => value,
@@ -114,14 +113,56 @@ impl Provider for ProtonGE {
         package: &str,
         text_buffer: &gtk::TextBuffer,
     ) -> std::thread::JoinHandle<bool> {
-        command::run_stream(format!("echo 'TODO' {}", package), text_buffer) //TODO
+        let pkg = self.package(package).unwrap().clone();
+        let txt_buffer = text_buffer.clone();
+        let proton_location = self.proton_location();
+        let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+        let tr = thread::spawn(move || {
+            let proton_dir = fs::read_dir(&proton_location).unwrap();
+            for dir in proton_dir {
+                let entry = dir.unwrap();
+                let file_type = entry.file_type().unwrap();
+                if file_type.is_dir() {
+                    let name = entry.file_name().to_str().unwrap().to_owned();
+                    if name.contains(&pkg.version) {
+                        let result = fs::remove_dir_all(format!("{}/{}", &proton_location, &name));
+                        match result {
+                            Ok(_) => {
+                                let _ = tx.send("Removido com sucesso. ".to_owned());
+                                return true;
+                            }
+                            Err(value) => {
+                                let _ = tx.send(value.to_string());
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        });
+
+        rx.attach(None, move |text| {
+            let mut text_iter = txt_buffer.end_iter();
+            txt_buffer.insert(&mut text_iter, &text);
+            glib::Continue(true)
+        });
+
+        tr
     }
     fn update(
         &self,
         _password: &secstr::SecVec<u8>,
         text_buffer: &gtk::TextBuffer,
     ) -> std::thread::JoinHandle<bool> {
-        command::run_stream(format!("echo 'TODO'"), text_buffer) //TODO
+        let pkg = self.packages[0].clone();
+
+        if pkg.is_installed {
+            let mut text_iter = text_buffer.end_iter();
+            text_buffer.insert(&mut text_iter, "Nothing to do. ");
+            return thread::spawn(|| true);
+        }
+        self.download(&pkg.name, text_buffer)
     }
     fn installed(&self) -> usize {
         self.installed
@@ -135,6 +176,14 @@ impl ProtonGE {
         for response in &self.packages_description {
             if response.tag_name.eq(tag_name) {
                 return Some(response);
+            }
+        }
+        None
+    }
+    fn package(&self, name: &str) -> Option<&Package> {
+        for package in &self.packages {
+            if package.name.eq(name) {
+                return Some(package);
             }
         }
         None
@@ -154,16 +203,16 @@ impl ProtonGE {
                 }
             }
         }
-
+        api::download_and_extract(url.unwrap(), self.proton_location(), text_buffer)
+    }
+    fn proton_location(&self) -> String {
         let home = command::run("echo $HOME").unwrap();
-        let home = format!(
-            "{}/.local/share/Steam/compatibilitytools.d/{}",
-            home, package
-        );
-
-        api::download(url.unwrap(), home, text_buffer)
+        format!("{}/.local/share/Steam/compatibilitytools.d", home.trim())
     }
 }
 pub fn is_available() -> bool {
-    true //TODO
+    match api::get_str("https://api.github.com/zen") {
+        Ok(_) => true,
+        _ => false,
+    }
 }
