@@ -110,9 +110,6 @@ impl Providers {
 }
 pub fn init() -> Providers {
     let mut prov = Providers { list: Vec::new() };
-    if protonge::is_available() {
-        prov.list.push(Box::new(protonge::init()));
-    }
     if pacman::is_available() {
         prov.list.push(Box::new(pacman::init()));
     }
@@ -121,6 +118,9 @@ pub fn init() -> Providers {
     }
     if paru::is_available() {
         prov.list.push(Box::new(paru::init()));
+    }
+    if protonge::is_available() {
+        prov.list.push(Box::new(protonge::init()));
     }
     prov
 }
