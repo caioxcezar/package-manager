@@ -129,7 +129,11 @@ fn provider(provider_name: &str) -> Option<Box<dyn Provider>> {
         "Pacman" => Some(Box::new(pacman::init())),
         "Flatpak" => Some(Box::new(flatpak::init())),
         "Paru" => Some(Box::new(paru::init())),
-        "Proton GE" => Some(Box::new(protonge::init())),
+        "Proton GE" => {
+            let mut proton_ge = protonge::init();
+            let _ = proton_ge.load_packages();
+            Some(Box::new(proton_ge))
+        }
         &_ => None,
     }
 }
