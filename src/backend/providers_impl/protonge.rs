@@ -3,6 +3,7 @@ use gtk::glib;
 use gtk::traits::TextBufferExt;
 use serde::Deserialize;
 use std::fs;
+use std::path::Path;
 use std::thread;
 pub struct ProtonGE {
     name: String,
@@ -11,6 +12,7 @@ pub struct ProtonGE {
     total: usize,
     root_required: bool,
     endpoint: String,
+    folder_path: String,
     packages_description: Vec<ApiResponse>,
 }
 
@@ -38,6 +40,7 @@ pub fn init() -> ProtonGE {
         endpoint: String::from(
             "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases",
         ),
+        folder_path: String::from("/.steam/root/compatibilitytools.d"),
         packages_description: Vec::new(),
     }
 }
@@ -207,7 +210,11 @@ impl ProtonGE {
     }
     fn proton_location(&self) -> String {
         let home = command::run("echo $HOME").unwrap();
-        format!("{}/.local/share/Steam/compatibilitytools.d", home.trim())
+        if !Path::new(&format!("{}{}", home.trim(), &self.folder_path)).exists() {
+            let _ = fs::create_dir_all(format!("{}{}", home.trim(), &self.folder_path));
+        }
+        let home = command::run("echo $HOME").unwrap();
+        format!("{}{}", home.trim(), &self.folder_path)
     }
 }
 pub fn is_available() -> bool {
