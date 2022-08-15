@@ -144,7 +144,7 @@ fn inner_update_all(
 ) {
     if provider_names.len() <= 0 {
         let mut text_iter = text_buffer.end_iter();
-        text_buffer.insert(&mut text_iter, ":::: Updated All ::::");
+        text_buffer.insert(&mut text_iter, "\n:::: All Updated ::::");
         return;
     }
     let provider_name = provider_names.remove(0);

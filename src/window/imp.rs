@@ -140,7 +140,7 @@ impl Window {
             let mut end = buff.end_iter();
             let line = buff.text(&start, &end, false);
             let line = line.as_str();
-            if line.contains(":::: Updated All ::::") {
+            if line.contains(":::: All Updated ::::") {
                 combobox_provider.set_active(u32_provider);
                 info_bar_label.set_text("Finished");
                 info_bar.set_visible(true);
