@@ -15,6 +15,6 @@ glib::wrapper! {
 impl Window {
     pub fn new(app: &application::PackageManagerApplication) -> Self {
         // Create new window
-        Object::new(&[("application", app)]).expect("Failed to create Window")
+        Object::builder().property("application", app).build()
     }
 }

@@ -1,3 +1,5 @@
+use crate::window::Window;
+
 use super::*;
 use gtk::glib;
 #[derive(Debug, Default)]
@@ -11,20 +13,21 @@ impl ObjectSubclass for PackageManagerApplication {
 }
 
 impl ObjectImpl for PackageManagerApplication {
-    fn constructed(&self, obj: &Self::Type) {
-        self.parent_constructed(obj);
-
+    fn constructed(&self) {
+        self.parent_constructed();
+        let obj = self.obj();
         obj.setup_gactions();
         obj.set_accels_for_action("app.quit", &["<primary>q"]);
     }
 }
 
 impl ApplicationImpl for PackageManagerApplication {
-    fn activate(&self, application: &Self::Type) {
+    fn activate(&self) {
+        let application = self.obj();
         let window = if let Some(window) = application.active_window() {
             window
         } else {
-            let window = crate::Window::new(application);
+            let window = Window::new(&*application);
             window.upcast()
         };
         window.present();
