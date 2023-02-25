@@ -1,7 +1,6 @@
 use adw::subclass::prelude::*;
 use glib::clone;
 use gtk::prelude::*;
-use gtk::subclass::prelude::*;
 use gtk::{gio, glib};
 
 use crate::constants;
@@ -14,9 +13,10 @@ glib::wrapper! {
 }
 
 impl PackageManagerApplication {
-    pub fn new(application_id: &str, flags: &gio::ApplicationFlags) -> Self {
-        glib::Object::new(&[("application-id", &application_id), ("flags", flags)])
-            .expect("Failed to create PackageManagerApplication")
+    pub fn new(application_id: &str) -> Self {
+        glib::Object::builder()
+            .property("application-id", &application_id)
+            .build()
     }
 
     fn setup_gactions(&self) {
@@ -47,7 +47,7 @@ impl PackageManagerApplication {
             .comments("A simple package manager")
             .website_label("github")
             .website("https://github.com/caioxcezar/package-manager")
-            .authors(vec!["Caio Rezende".into()])
+            .authors(vec!["Caio Rezende"])
             .build();
 
         dialog.present();

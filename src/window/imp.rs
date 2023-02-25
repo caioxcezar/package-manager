@@ -2,7 +2,6 @@ use crate::backend::providers::{self, Providers};
 use crate::messagebox;
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
-use gtk::subclass::prelude::*;
 use gtk::{glib, CompositeTemplate, TextBuffer, TreeModelFilter};
 use gtk::{prelude::*, TreeModelSort};
 use secstr::{SecStr, SecVec};
@@ -58,9 +57,9 @@ impl ObjectSubclass for Window {
 }
 
 impl ObjectImpl for Window {
-    fn constructed(&self, obj: &Self::Type) {
+    fn constructed(&self) {
         // Call "constructed" on parent
-        self.parent_constructed(obj);
+        self.parent_constructed();
         {
             let providers = providers::init();
 
@@ -133,7 +132,7 @@ impl Window {
         let text_command = self.text_command.clone();
 
         let u32_provider = self.combobox_provider.active();
-        let buffer = TextBuffer::builder().text(&"").build();
+        let buffer = TextBuffer::builder().text("").build();
 
         let _ = buffer.connect_changed(move |buff| {
             let start = buff.iter_at_line(buff.line_count() - 1).unwrap();
@@ -160,7 +159,7 @@ impl Window {
                 .get_value(&tree_iter, 4 as i32)
                 .get::<String>()
                 .unwrap();
-            let buffer = TextBuffer::builder().text(&"").build();
+            let buffer = TextBuffer::builder().text("").build();
             let action = button.label().unwrap();
             let providers = self.providers.borrow();
             self.text_command.set_buffer(Some(&buffer));
@@ -220,7 +219,7 @@ impl Window {
     #[template_callback]
     async fn handle_update(&self, _button: gtk::Button) {
         let providers = self.providers.borrow();
-        let buffer = TextBuffer::builder().text(&"").build();
+        let buffer = TextBuffer::builder().text("").build();
         self.text_command.set_buffer(Some(&buffer));
         let password = match self.password(&providers).await {
             Some(value) => value,

@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 secstr = "0.5.0"
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
-gtk = { version = "0.4.8", package = "gtk4" }
+gtk = { version = "0.6.2", package = "gtk4" }
 reqwest = { version = "0.11", features = ["blocking", "json"] }
 serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0"
@@ -14,7 +14,8 @@ tar = "0.4"
 
 [dependencies.adw]
 package = "libadwaita"
-version  = "0.1.1"
+version  = "0.3.1"
 
 [build-dependencies]
-gtk = { version = "0.4.8", package = "gtk4" }
+glib-build-tools = "0.17.0"
+gtk = { version = "0.6.2", package = "gtk4" }
