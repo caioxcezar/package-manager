@@ -76,11 +76,7 @@ impl Provider for Pacman {
         package: &str,
         text_buffer: &TextBuffer,
     ) -> JoinHandle<bool> {
-        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        let command = format!(
-            "echo '{}' | sudo -S pacman -Syu {} --noconfirm",
-            password, package
-        );
+        let command = command_build(password, format!("pacman -Syu {} --noconfirm", package));
         command::run_stream(command, text_buffer)
     }
     fn remove(
@@ -89,17 +85,11 @@ impl Provider for Pacman {
         package: &str,
         text_buffer: &TextBuffer,
     ) -> JoinHandle<bool> {
-        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        let command = format!(
-            "echo '{}' | sudo -S pacman -Rsu {} --noconfirm",
-            password.to_string(),
-            package
-        );
+        let command = command_build(password, format!("pacman -Rsu {} --noconfirm", package));
         command::run_stream(command, text_buffer)
     }
     fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        let command = format!("echo '{}' | sudo -S pacman -Syu --noconfirm", password);
+        let command = command_build(password, "pacman -Syu --noconfirm".to_owned());
         command::run_stream(command, text_buffer)
     }
 }
@@ -109,4 +99,13 @@ pub fn is_available() -> bool {
         Ok(_) => true,
         Err(_) => false,
     }
+}
+
+fn command_build(password: &SecVec<u8>, command: String) -> String {
+    let mut command = command;
+    if cfg!(unix) {
+        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
+        command.insert_str(0, &format!("echo '{}' | sudo -S ", password));
+    }
+    command
 }
