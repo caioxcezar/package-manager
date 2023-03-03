@@ -20,6 +20,9 @@ pub fn error(title: &str, body: &str, window: Option<gtk::Window>) {
 }
 
 pub async fn ask_password(window: Option<gtk::Window>) -> Option<SecVec<u8>> {
+    if cfg!(windows) {
+        return Some(SecStr::from("windows"));
+    }
     let window_clone = window.clone();
     let mut dialog = Dialog::builder().modal(true);
     if let Some(window) = window {

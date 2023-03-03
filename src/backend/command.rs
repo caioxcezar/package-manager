@@ -5,7 +5,8 @@ use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
 
 pub fn run(command: &str) -> Result<String, Error> {
-    let output = Command::new("sh")
+    let program = if cfg!(windows) { "powershell" } else { "sh" };
+    let output = Command::new(program)
         .arg("-c")
         .arg(command)
         .output()
@@ -22,10 +23,11 @@ pub fn run(command: &str) -> Result<String, Error> {
 }
 
 pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) -> JoinHandle<bool> {
+    let program = if cfg!(windows) { "powershell" } else { "sh" };
     let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     let txt_buffer = text_buffer.clone();
     let tr = thread::spawn(move || {
-        let mut cmd = Command::new("sh")
+        let mut cmd = Command::new(program)
             .arg("-c")
             .arg(command)
             .stdout(Stdio::piped())
