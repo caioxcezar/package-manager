@@ -218,6 +218,7 @@ impl ProtonGE {
     }
 }
 pub fn is_available() -> bool {
+    if cfg!(windows) { return false; }
     match api::get_str("https://api.github.com/zen") {
         Ok(_) => true,
         _ => false,
