@@ -1,6 +1,6 @@
 use super::{
     provider::Provider,
-    providers_impl::{flatpak, pacman, paru, protonge},
+    providers_impl::{flatpak, pacman, paru, protonge, winget},
 };
 use gtk::{glib, prelude::*, TextBuffer};
 use secstr::SecVec;
@@ -122,6 +122,9 @@ pub fn init() -> Providers {
     if protonge::is_available() {
         prov.list.push(Box::new(protonge::init()));
     }
+    if winget::is_available() {
+        prov.list.push(Box::new(winget::init()));
+    }
     prov
 }
 fn provider(provider_name: &str) -> Option<Box<dyn Provider>> {
@@ -134,6 +137,7 @@ fn provider(provider_name: &str) -> Option<Box<dyn Provider>> {
             let _ = proton_ge.load_packages();
             Some(Box::new(proton_ge))
         }
+        "Winget" => Some(Box::new(winget::init())),
         &_ => None,
     }
 }
