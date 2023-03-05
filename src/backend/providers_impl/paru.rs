@@ -1,6 +1,7 @@
 use std::thread::JoinHandle;
 
 use gtk::TextBuffer;
+use rayon::prelude::*;
 use secstr::SecVec;
 
 use crate::backend::{command, package::Package, provider::Provider};
@@ -48,22 +49,25 @@ impl Provider for Paru {
         };
         let packages: Vec<&str> = packages.split('\n').collect();
 
-        for package in packages {
-            let list_package: Vec<&str> = package.split(' ').collect();
-            if list_package.len() < 2 {
-                continue;
-            }
-            self.packages.push(Package {
-                provider: String::from("Paru"),
-                repository: String::from(list_package[0]),
-                name: String::from(list_package[1]),
-                qualified_name: String::from(list_package[1]),
-                version: String::from(list_package[2]),
-                is_installed: list_package.len() == 4,
-            });
-        }
+        self.packages = packages
+            .par_iter()
+            .filter_map(|package| {
+                let list_package: Vec<&str> = package.split(' ').collect();
+                if list_package.len() < 2 {
+                    return None;
+                }
+                Some(Package {
+                    provider: String::from("Paru"),
+                    repository: String::from(list_package[0]),
+                    name: String::from(list_package[1]),
+                    qualified_name: String::from(list_package[1]),
+                    version: String::from(list_package[2]),
+                    is_installed: list_package.len() == 4,
+                })
+            })
+            .collect();
 
-        self.installed = self.packages.iter().filter(|&p| p.is_installed).count();
+        self.installed = self.packages.par_iter().filter(|&p| p.is_installed).count();
         self.total = self.packages.len();
         Ok(())
     }

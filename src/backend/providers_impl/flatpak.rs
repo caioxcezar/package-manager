@@ -1,6 +1,7 @@
 use std::thread::JoinHandle;
 
 use gtk::TextBuffer;
+use rayon::prelude::*;
 use secstr::SecVec;
 
 use crate::backend::{command, package::Package, provider::Provider};
@@ -41,6 +42,20 @@ impl Provider for Flatpak {
     }
     fn load_packages(&mut self) -> Result<(), String> {
         self.packages.clear();
+
+        let packages = command::run("flatpak list");
+        let packages = match packages {
+            Ok(result) => result,
+            Err(err) => return Err(format!("{:?}", err)),
+        };
+        let installed_packages: Vec<&str> = packages
+            .split('\n')
+            .filter(|e| {
+                let x: Vec<&str> = e.split('\t').collect();
+                x.len().gt(&1)
+            })
+            .collect();
+
         let remotes = command::run("flatpak remotes");
         let remotes = match remotes {
             Ok(result) => result,
@@ -59,44 +74,25 @@ impl Provider for Flatpak {
                 Err(err) => return Err(format!("{:?}", err)),
             };
             let packages: Vec<&str> = packages.split('\n').collect();
-
-            for str_package in packages {
+            self.packages.append(&mut packages.par_iter().filter_map(|str_package| {
                 let arr_package: Vec<&str> = str_package.split('\t').collect();
                 if arr_package.len() < 2 {
-                    continue;
+                    return None;
                 }
-                self.packages.push(Package {
+                Some(Package {
                     provider: String::from("Flatpak"),
                     repository: String::from(arr_remote[0]),
                     name: String::from(arr_package[0]),
                     qualified_name: String::from(arr_package[1]),
                     version: String::from(arr_package[2]),
-                    is_installed: false,
-                });
-            }
-
-            let packages = command::run("flatpak list");
-            let packages = match packages {
-                Ok(result) => result,
-                Err(err) => return Err(format!("{:?}", err)),
-            };
-            let installed_package: Vec<&str> = packages
-                .split('\n')
-                .filter(|e| {
-                    let x: Vec<&str> = e.split('\t').collect();
-                    x.len().gt(&1)
+                    is_installed: installed_packages
+                    .par_iter()
+                    .any(|f| f.contains(arr_package[1])),
                 })
-                .collect();
-
-            for package in &mut self.packages {
-                package.is_installed = installed_package
-                    .iter()
-                    .any(|f| f.contains(&package.qualified_name));
-            }
-
-            self.total = self.packages.len();
-            self.installed = installed_package.len();
+            }).collect::<Vec<Package>>());
         }
+        self.installed = self.packages.par_iter().filter(|&p| p.is_installed).count();
+        self.total = self.packages.len();
         Ok(())
     }
     fn package_info(&self, package: &str) -> String {

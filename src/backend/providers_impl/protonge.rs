@@ -1,6 +1,7 @@
 use crate::backend::{api, command, package::Package, provider::Provider};
 use gtk::glib;
 use gtk::traits::TextBufferExt;
+use rayon::prelude::*;
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -49,15 +50,18 @@ impl Provider for ProtonGE {
     fn load_packages(&mut self) -> Result<(), String> {
         let proton_location = self.proton_location();
         let proton_dir = fs::read_dir(&proton_location).unwrap();
-        let mut proton = Vec::<String>::new();
-        for dir in proton_dir {
-            let entry = dir.unwrap();
-            let file_type = entry.file_type().unwrap();
-            if file_type.is_dir() {
-                let name = entry.file_name().to_str().unwrap().to_owned();
-                proton.push(name);
-            }
-        }
+        let proton: Vec<String> = proton_dir
+            .filter_map(|dir| {
+                let entry = dir.unwrap();
+                let file_type = entry.file_type().unwrap();
+                if file_type.is_dir() {
+                    let name = entry.file_name().to_str().unwrap().to_owned();
+                    Some(name)
+                } else {
+                    None
+                }
+            })
+            .collect();
         let resp = api::get::<Vec<ApiResponse>>(&self.endpoint);
         self.packages_description = match resp {
             Ok(value) => value,
@@ -65,25 +69,28 @@ impl Provider for ProtonGE {
                 return Err(value);
             }
         };
-        self.packages = Vec::new();
-        for package in &self.packages_description {
-            let name = &package.tag_name;
-            let name = if name.contains("GE-Proton") {
-                package.tag_name.to_owned()
-            } else {
-                format!("GE-Proton{}", name)
-            };
-            let version = &name[9..];
-            self.packages.push(Package {
-                provider: "GloriousEggroll".to_owned(),
-                name: name.to_owned(),
-                qualified_name: name.to_owned(),
-                repository: "GloriousEggroll".to_owned(),
-                version: version.to_string(),
-                is_installed: proton.contains(&name),
-            });
-        }
-        self.installed = self.packages.iter().filter(|&p| p.is_installed).count();
+        self.packages = self
+            .packages_description
+            .par_iter()
+            .map(|package| {
+                let name = &package.tag_name;
+                let name = if name.contains("GE-Proton") {
+                    package.tag_name.to_owned()
+                } else {
+                    format!("GE-Proton{}", name)
+                };
+                let version = &name[9..];
+                Package {
+                    provider: "GloriousEggroll".to_owned(),
+                    name: name.to_owned(),
+                    qualified_name: name.to_owned(),
+                    repository: "GloriousEggroll".to_owned(),
+                    version: version.to_string(),
+                    is_installed: proton.contains(&name),
+                }
+            })
+            .collect();
+        self.installed = self.packages.par_iter().filter(|&p| p.is_installed).count();
         self.total = self.packages.len();
         Ok(())
     }
@@ -176,20 +183,10 @@ impl Provider for ProtonGE {
 }
 impl ProtonGE {
     fn api_package_data(&self, tag_name: &str) -> Option<&ApiResponse> {
-        for response in &self.packages_description {
-            if response.tag_name.eq(tag_name) {
-                return Some(response);
-            }
-        }
-        None
+        self.packages_description.par_iter().find_any(|response| response.tag_name.eq(tag_name))
     }
     fn package(&self, name: &str) -> Option<&Package> {
-        for package in &self.packages {
-            if package.name.eq(name) {
-                return Some(package);
-            }
-        }
-        None
+        self.packages.par_iter().find_any(|package| package.name.eq(name))
     }
     fn download(
         &self,
