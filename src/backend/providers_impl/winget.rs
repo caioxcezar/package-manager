@@ -50,7 +50,6 @@ impl Provider for Winget {
         let name = packages.find("Name").unwrap();
         let id = packages.find("Id").unwrap() - name;
         let version = packages.find("Version").unwrap() - name;
-        let available = packages.find("Available").unwrap() - name;
         let source = packages.find("Source").unwrap() - name;
 
         let packages: Vec<&str> = packages.split('\n').collect();
@@ -71,7 +70,7 @@ impl Provider for Winget {
                     repository: repository.to_owned(),
                     name: split_utf8(package, 0, id),
                     qualified_name: split_utf8(package, id, version),
-                    version: split_utf8(package, version, available),
+                    version: split_utf8(package, version, source),
                     is_installed: true,
                 })
             })
