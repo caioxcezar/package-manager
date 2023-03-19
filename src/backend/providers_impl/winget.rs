@@ -123,7 +123,7 @@ impl Provider for Winget {
         command::run_stream(format!("winget uninstall {}", package), text_buffer)
     }
     fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        command::run_stream("winget upgrade".to_owned(), text_buffer)
+        command::run_stream("winget upgrade -h --all".to_owned(), text_buffer)
     }
 }
 pub fn is_available() -> bool {
