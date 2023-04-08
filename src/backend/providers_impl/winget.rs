@@ -1,5 +1,6 @@
 use gtk::TextBuffer;
 use rayon::prelude::*;
+use regex::Regex;
 use secstr::SecVec;
 use std::thread::JoinHandle;
 
@@ -41,7 +42,7 @@ impl Provider for Winget {
     }
     fn load_packages(&mut self) -> Result<(), String> {
         self.packages.clear();
-        let packages = command::run("winget list");
+        let packages = command::run("winget list --verbose");
         let packages = match packages {
             Ok(result) => result,
             Err(err) => return Err(format!("{:?}", err)),
@@ -59,6 +60,10 @@ impl Provider for Winget {
                 if package.contains("Name") || package.contains("-----") || package.len() < source {
                     return None;
                 }
+                let name = split_utf8(package, 0, id);
+                if Regex::new(r"[^\x00-\x7F]").unwrap().is_match(&name) {
+                    return None;
+                }
                 let repository = if package[source..].trim() == "" {
                     "local"
                 } else {
@@ -68,7 +73,7 @@ impl Provider for Winget {
                 Some(Package {
                     provider: String::from("Winget"),
                     repository: repository.to_owned(),
-                    name: split_utf8(package, 0, id),
+                    name,
                     qualified_name: split_utf8(package, id, version),
                     version: split_utf8(package, version, source),
                     is_installed: true,
@@ -76,7 +81,7 @@ impl Provider for Winget {
             })
             .collect();
 
-        let packages = command::run("winget search -q `\"`\"");
+        let packages = command::run("winget search -q `\"`\" --verbose");
         let packages = match packages {
             Ok(result) => result,
             Err(err) => return Err(format!("{:?}", err)),
@@ -95,10 +100,14 @@ impl Provider for Winget {
                 if package.contains("Name") || package.contains("-----") || package.len() < source {
                     return None;
                 }
+                let name = split_utf8(package, 0, id);
+                if Regex::new(r"[^\x00-\x7F]").unwrap().is_match(&name) {
+                    return None;
+                }
                 Some(Package {
                     provider: String::from("Winget"),
                     repository: package[source..].to_owned(),
-                    name: split_utf8(package, 0, id),
+                    name,
                     qualified_name: split_utf8(package, id, version),
                     version: split_utf8(package, version, _match),
                     is_installed: installed_packages
