@@ -1,6 +1,6 @@
 use super::{
     provider::Provider,
-    providers_impl::{flatpak, pacman, paru, protonge, winget},
+    providers_impl::{flatpak, pacman, paru, protonge, winget, dnf},
 };
 use gtk::{glib, prelude::*, TextBuffer};
 use secstr::SecVec;
@@ -110,6 +110,9 @@ impl Providers {
 }
 pub fn init() -> Providers {
     let mut prov = Providers { list: Vec::new() };
+    if dnf::is_available() {
+        prov.list.push(Box::new(dnf::init()));
+    }
     if pacman::is_available() {
         prov.list.push(Box::new(pacman::init()));
     }
@@ -138,6 +141,7 @@ fn provider(provider_name: &str) -> Option<Box<dyn Provider>> {
             Some(Box::new(proton_ge))
         }
         "Winget" => Some(Box::new(winget::init())),
+        "Dnf" => Some(Box::new(dnf::init())),
         &_ => None,
     }
 }
