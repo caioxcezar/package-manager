@@ -37,6 +37,8 @@ pub struct Window {
     pub info_bar: TemplateChild<gtk::InfoBar>,
     #[template_child]
     pub info_bar_label: TemplateChild<gtk::Label>,
+    #[template_child]
+    pub splash: TemplateChild<gtk::Picture>,
     pub filter_list: gtk::FilterListModel,
     providers: RefCell<Providers>,
 }
@@ -61,6 +63,13 @@ impl ObjectImpl for Window {
     fn constructed(&self) {
         // Call "constructed" on parent
         self.parent_constructed();
+
+        self.header_bar.hide();
+        let img = gtk::Image::new();
+        img.set_from_resource(Some("/org/caioxcezar/packagemanager/package_manager.svg"));
+        let paintable = img.paintable().unwrap();
+        self.splash.set_paintable(Some(&paintable));
+
         self.filter_list.set_incremental(true);
         {
             let providers = providers::init();
@@ -90,8 +99,8 @@ impl Window {
             Some(value) => {
                 let value = value.downcast::<PackageObject>().unwrap();
                 Some(value)
-            },
-            None => None
+            }
+            None => None,
         }
     }
     #[template_callback]
@@ -99,7 +108,7 @@ impl Window {
         let item = self.selected_item();
         let item = match item {
             Some(value) => value,
-            None => return
+            None => return,
         };
         let providers = self.providers.borrow();
         let info = providers.package_info(&item.qualifiedName(), &self.combobox_text());
@@ -168,7 +177,7 @@ impl Window {
         let item = self.selected_item();
         let item = match item {
             Some(value) => value,
-            None => return
+            None => return,
         };
         let provider_name = self.combobox_text();
         let buffer = TextBuffer::builder().text("").build();
@@ -181,7 +190,9 @@ impl Window {
         };
         self.goto_command();
         let handle = match action.as_str() {
-            "Install" => providers.install(&provider_name, &item.qualifiedName(), &buffer, &password),
+            "Install" => {
+                providers.install(&provider_name, &item.qualifiedName(), &buffer, &password)
+            }
             "Remove" => providers.remove(&provider_name, &item.qualifiedName(), &buffer, &password),
             _ => return,
         };
@@ -204,6 +215,10 @@ impl Window {
         };
         self.filter_list.set_model(Some(&provider));
         self.single_selection.set_model(Some(&self.filter_list));
+
+        self.header_bar.show();
+        let widget = self.stack.child_by_name("main_page").unwrap();
+        self.stack.set_visible_child(&widget);
     }
     #[template_callback]
     fn signal_check_setup_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
@@ -222,7 +237,7 @@ impl Window {
             .unwrap();
         let ent = grid_check::Entry {
             check: entry.installed(),
-            sensitive: false
+            sensitive: false,
         };
         child.set_entry(&ent);
     }

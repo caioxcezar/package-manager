@@ -38,6 +38,14 @@
     <child>
       <object class="GtkStack" id="stack">
         <child>
+          <object class="GtkPicture" id="splash">
+            <property name="margin-start">100</property>
+            <property name="margin-end">100</property>
+            <property name="margin-top">100</property>
+            <property name="margin-bottom">100</property>
+          </object>
+        </child>
+        <child>
           <object class="GtkStackPage" id="main_page">
             <property name="name">main_page</property>
             <property name="child">
@@ -55,7 +63,8 @@
                           <object class="GtkColumnView" id="column_view">
                             <property name="model">
                               <object class="GtkSingleSelection" id="single_selection">
-                                <signal name="selection-changed" handler="selection_changed" swapped="true" />
+                                <signal name="selection-changed" handler="selection_changed"
+                                  swapped="true" />
                               </object>
                             </property>
                             <child>
