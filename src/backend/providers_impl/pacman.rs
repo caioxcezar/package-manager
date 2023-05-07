@@ -4,11 +4,11 @@ use gtk::TextBuffer;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use secstr::SecVec;
 
-use crate::backend::{command, package::Package, provider::Provider};
+use crate::backend::{command, package_object::PackageData, provider::Provider};
 #[derive(Clone)]
 pub struct Pacman {
     name: String,
-    packages: Vec<Package>,
+    packages: Vec<PackageData>,
     installed: usize,
     total: usize,
     root_required: bool,
@@ -37,7 +37,7 @@ impl Provider for Pacman {
     fn name(&self) -> String {
         self.name.clone()
     }
-    fn packages(&self) -> Vec<Package> {
+    fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
     fn load_packages(&mut self) -> Result<(), String> {
@@ -55,18 +55,17 @@ impl Provider for Pacman {
                 if list_package.len() < 2 {
                     return None;
                 }
-                Some(Package {
-                    provider: String::from("Pacman"),
+                Some(PackageData {
                     repository: String::from(list_package[0]),
                     name: String::from(list_package[1]),
                     qualified_name: String::from(list_package[1]),
                     version: String::from(list_package[2]),
-                    is_installed: list_package.len() == 4,
+                    installed: list_package.len() == 4,
                 })
             })
             .collect();
 
-        self.installed = self.packages.par_iter().filter(|&p| p.is_installed).count();
+        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
         self.total = self.packages.len();
         Ok(())
     }

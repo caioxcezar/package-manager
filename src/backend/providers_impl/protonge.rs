@@ -1,4 +1,4 @@
-use crate::backend::{api, command, package::Package, provider::Provider};
+use crate::backend::{api, command, package_object::PackageData, provider::Provider};
 use gtk::glib;
 use gtk::traits::TextBufferExt;
 use rayon::prelude::*;
@@ -8,7 +8,7 @@ use std::path::Path;
 use std::thread;
 pub struct ProtonGE {
     name: String,
-    packages: Vec<Package>,
+    packages: Vec<PackageData>,
     installed: usize,
     total: usize,
     root_required: bool,
@@ -80,17 +80,16 @@ impl Provider for ProtonGE {
                     format!("GE-Proton{}", name)
                 };
                 let version = &name[9..];
-                Package {
-                    provider: "GloriousEggroll".to_owned(),
+                PackageData {
                     name: name.to_owned(),
                     qualified_name: name.to_owned(),
                     repository: "GloriousEggroll".to_owned(),
                     version: version.to_string(),
-                    is_installed: proton.contains(&name),
+                    installed: proton.contains(&name),
                 }
             })
             .collect();
-        self.installed = self.packages.par_iter().filter(|&p| p.is_installed).count();
+        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
         self.total = self.packages.len();
         Ok(())
     }
@@ -100,7 +99,7 @@ impl Provider for ProtonGE {
     fn is_root_required(&self) -> bool {
         self.root_required
     }
-    fn packages(&self) -> Vec<Package> {
+    fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
     fn package_info(&self, package: &str) -> String {
@@ -167,7 +166,7 @@ impl Provider for ProtonGE {
     ) -> std::thread::JoinHandle<bool> {
         let pkg = self.packages[0].clone();
 
-        if pkg.is_installed {
+        if pkg.installed {
             let mut text_iter = text_buffer.end_iter();
             text_buffer.insert(&mut text_iter, "Nothing to do. ");
             return thread::spawn(|| true);
@@ -185,7 +184,7 @@ impl ProtonGE {
     fn api_package_data(&self, tag_name: &str) -> Option<&ApiResponse> {
         self.packages_description.par_iter().find_any(|response| response.tag_name.eq(tag_name))
     }
-    fn package(&self, name: &str) -> Option<&Package> {
+    fn package(&self, name: &str) -> Option<&PackageData> {
         self.packages.par_iter().find_any(|package| package.name.eq(name))
     }
     fn download(

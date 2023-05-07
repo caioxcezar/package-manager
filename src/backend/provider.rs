@@ -3,13 +3,13 @@ use std::thread::JoinHandle;
 use gtk::TextBuffer;
 use secstr::SecVec;
 
-use crate::backend::package::Package;
+use super::package_object::PackageData;
 
 pub trait Provider {
     fn load_packages(&mut self) -> Result<(), String>;
     fn name(&self) -> String;
     fn is_root_required(&self) -> bool;
-    fn packages(&self) -> Vec<Package>;
+    fn packages(&self) -> Vec<PackageData>;
     fn package_info(&self, package: &str) -> String;
     fn install(
         &self,

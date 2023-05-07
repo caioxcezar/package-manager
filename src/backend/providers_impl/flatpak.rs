@@ -4,11 +4,11 @@ use gtk::TextBuffer;
 use rayon::prelude::*;
 use secstr::SecVec;
 
-use crate::backend::{command, package::Package, provider::Provider};
+use crate::backend::{command, provider::Provider, package_object::PackageData};
 #[derive(Clone)]
 pub struct Flatpak {
     name: String,
-    packages: Vec<Package>,
+    packages: Vec<PackageData>,
     installed: usize,
     total: usize,
     root_required: bool,
@@ -37,7 +37,7 @@ impl Provider for Flatpak {
     fn name(&self) -> String {
         self.name.clone()
     }
-    fn packages(&self) -> Vec<Package> {
+    fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
     fn load_packages(&mut self) -> Result<(), String> {
@@ -79,19 +79,18 @@ impl Provider for Flatpak {
                 if arr_package.len() < 2 {
                     return None;
                 }
-                Some(Package {
-                    provider: String::from("Flatpak"),
+                Some(PackageData {
                     repository: String::from(arr_remote[0]),
                     name: String::from(arr_package[0]),
                     qualified_name: String::from(arr_package[1]),
                     version: String::from(arr_package[2]),
-                    is_installed: installed_packages
+                    installed: installed_packages
                     .par_iter()
                     .any(|f| f.contains(arr_package[1])),
                 })
-            }).collect::<Vec<Package>>());
+            }).collect::<Vec<PackageData>>());
         }
-        self.installed = self.packages.par_iter().filter(|&p| p.is_installed).count();
+        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
         self.total = self.packages.len();
         Ok(())
     }

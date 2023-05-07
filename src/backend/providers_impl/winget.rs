@@ -4,11 +4,11 @@ use regex::Regex;
 use secstr::SecVec;
 use std::thread::JoinHandle;
 
-use crate::backend::{command, package::Package, provider::Provider, utils::split_utf8};
+use crate::backend::{command, package_object::PackageData, provider::Provider, utils::split_utf8};
 #[derive(Clone)]
 pub struct Winget {
     name: String,
-    packages: Vec<Package>,
+    packages: Vec<PackageData>,
     installed: usize,
     total: usize,
     root_required: bool,
@@ -37,7 +37,7 @@ impl Provider for Winget {
     fn name(&self) -> String {
         self.name.clone()
     }
-    fn packages(&self) -> Vec<Package> {
+    fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
     fn load_packages(&mut self) -> Result<(), String> {
@@ -54,7 +54,7 @@ impl Provider for Winget {
         let source = packages.find("Source").unwrap() - name;
 
         let packages: Vec<&str> = packages.split('\n').collect();
-        let installed_packages: Vec<Package> = packages
+        let installed_packages: Vec<PackageData> = packages
             .par_iter()
             .filter_map(|package| {
                 if package.contains("Name") || package.contains("-----") || package.len() < source {
@@ -70,13 +70,12 @@ impl Provider for Winget {
                     &package[source..]
                 };
 
-                Some(Package {
-                    provider: String::from("Winget"),
+                Some(PackageData {
                     repository: repository.to_owned(),
                     name,
                     qualified_name: split_utf8(package, id, version),
                     version: split_utf8(package, version, source),
-                    is_installed: true,
+                    installed: true,
                 })
             })
             .collect();
@@ -104,13 +103,12 @@ impl Provider for Winget {
                 if Regex::new(r"[^\x00-\x7F]").unwrap().is_match(&name) {
                     return None;
                 }
-                Some(Package {
-                    provider: String::from("Winget"),
+                Some(PackageData {
                     repository: package[source..].to_owned(),
                     name,
                     qualified_name: split_utf8(package, id, version),
                     version: split_utf8(package, version, _match),
-                    is_installed: installed_packages
+                    installed: installed_packages
                         .par_iter()
                         .any(|f| f.qualified_name == split_utf8(package, id, version)),
                 })
