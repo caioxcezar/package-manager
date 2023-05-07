@@ -3,6 +3,9 @@ mod backend;
 mod constants;
 mod messagebox;
 mod window;
+mod grid_text;
+mod grid_check;
+
 use application::PackageManagerApplication;
 use gtk::gio;
 use gtk::prelude::*;
