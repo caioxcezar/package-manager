@@ -1,10 +1,12 @@
 use super::{
+    package_object::PackageObject,
     provider::Provider,
-    providers_impl::{flatpak, pacman, paru, protonge, winget, dnf},
+    providers_impl::{dnf, flatpak, pacman, paru, protonge, winget},
 };
-use gtk::{glib, prelude::*, TextBuffer};
+use gtk::{gio::ListStore, glib, prelude::*, TextBuffer};
 use secstr::SecVec;
 use std::thread::{self, JoinHandle};
+
 #[derive(Default)]
 pub struct Providers {
     pub list: Vec<Box<dyn Provider>>,
@@ -19,7 +21,7 @@ impl Providers {
         }
         None
     }
-    pub fn model(&mut self, name: &str) -> Result<gtk::ListStore, String> {
+    pub fn model(&mut self, name: &str) -> Result<ListStore, String> {
         let mut provider = None;
         for prov in &mut self.list {
             if name.eq(&prov.name()) {
@@ -34,25 +36,18 @@ impl Providers {
             return Err(format!("Error while loading packages. {}", value));
         }
         let packages = provider.packages();
-        let model = gtk::ListStore::new(&[
-            bool::static_type(),
-            String::static_type(),
-            String::static_type(),
-            String::static_type(),
-            String::static_type(),
-        ]);
+        let list_store = ListStore::new(PackageObject::static_type());
         // Filling up the tree view.
         for value in &packages {
-            let values: [(u32, &dyn ToValue); 5] = [
-                (0, &value.is_installed),
-                (1, &value.repository),
-                (2, &value.name),
-                (3, &value.version),
-                (4, &value.qualified_name),
-            ];
-            model.insert_with_values(None, &values);
+            list_store.append(&PackageObject::new(
+                value.is_installed,
+                value.repository.to_owned(),
+                value.name.to_owned(),
+                value.version.to_owned(),
+                value.qualified_name.to_owned(),
+            ));
         }
-        Ok(model)
+        Ok(list_store)
     }
     pub fn update(
         &self,

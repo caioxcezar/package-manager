@@ -1,9 +1,10 @@
+use crate::backend::package_object::PackageObject;
 use crate::backend::providers::{self, Providers};
-use crate::messagebox;
+use crate::{grid_check, grid_text, messagebox};
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
-use gtk::{glib, CompositeTemplate, TextBuffer, TreeModelFilter};
-use gtk::{prelude::*, TreeModelSort};
+use gtk::prelude::*;
+use gtk::{glib, CompositeTemplate, TextBuffer};
 use secstr::{SecStr, SecVec};
 use std::cell::RefCell;
 use std::thread::{self, JoinHandle};
@@ -15,7 +16,7 @@ pub struct Window {
     #[template_child]
     pub stack: TemplateChild<gtk::Stack>,
     #[template_child]
-    pub tree_view: TemplateChild<gtk::TreeView>,
+    pub column_view: TemplateChild<gtk::ColumnView>,
     #[template_child]
     pub search_entry: TemplateChild<gtk::SearchEntry>,
     #[template_child]
@@ -29,15 +30,15 @@ pub struct Window {
     #[template_child]
     pub text_box: TemplateChild<gtk::TextView>,
     #[template_child]
-    pub tree_selection: TemplateChild<gtk::TreeSelection>,
+    pub single_selection: TemplateChild<gtk::SingleSelection>,
     #[template_child]
     pub text_command: TemplateChild<gtk::TextView>,
     #[template_child]
     pub info_bar: TemplateChild<gtk::InfoBar>,
     #[template_child]
     pub info_bar_label: TemplateChild<gtk::Label>,
+    pub filter_list: gtk::FilterListModel,
     providers: RefCell<Providers>,
-    list_filter: RefCell<Option<TreeModelFilter>>,
 }
 
 #[glib::object_subclass]
@@ -60,6 +61,7 @@ impl ObjectImpl for Window {
     fn constructed(&self) {
         // Call "constructed" on parent
         self.parent_constructed();
+        self.filter_list.set_incremental(true);
         {
             let providers = providers::init();
 
@@ -82,36 +84,46 @@ impl ObjectImpl for Window {
 }
 #[gtk::template_callbacks]
 impl Window {
-    #[template_callback]
-    fn treeview_selection_changed(&self, tree_selection: gtk::TreeSelection) {
-        if let Some((model, iter)) = tree_selection.selected() {
-            let package = model.get_value(&iter, 4 as i32).get::<String>().unwrap();
-            let providers = self.providers.borrow();
-            let info = providers.package_info(&package, &self.combobox_text());
-            let info = match info {
-                Ok(value) => value,
-                Err(value) => {
-                    messagebox::error(
-                        "Error While Changing",
-                        &format!("{:?}", value),
-                        self.window(),
-                    );
-                    return;
-                }
-            };
-            let buffer = TextBuffer::builder().text(&info).build();
-            self.text_box.set_buffer(Some(&buffer));
-            self.text_box.set_visible(true);
-
-            let installed = model.get_value(&iter, 0 as i32).get::<bool>().unwrap();
-
-            if installed {
-                self.action.set_label("Remove");
-            } else {
-                self.action.set_label("Install");
-            }
-            self.action.set_sensitive(true);
+    fn selected_item(&self) -> Option<PackageObject> {
+        let item = self.single_selection.selected_item();
+        match item {
+            Some(value) => {
+                let value = value.downcast::<PackageObject>().unwrap();
+                Some(value)
+            },
+            None => None
         }
+    }
+    #[template_callback]
+    fn selection_changed(&self) {
+        let item = self.selected_item();
+        let item = match item {
+            Some(value) => value,
+            None => return
+        };
+        let providers = self.providers.borrow();
+        let info = providers.package_info(&item.qualifiedName(), &self.combobox_text());
+        let info = match info {
+            Ok(value) => value,
+            Err(value) => {
+                messagebox::error(
+                    "Error While Changing",
+                    &format!("{:?}", value),
+                    self.window(),
+                );
+                return;
+            }
+        };
+        let buffer = TextBuffer::builder().text(&info).build();
+        self.text_box.set_buffer(Some(&buffer));
+        self.text_box.set_visible(true);
+
+        if item.installed() {
+            self.action.set_label("Remove");
+        } else {
+            self.action.set_label("Install");
+        }
+        self.action.set_sensitive(true);
     }
     #[template_callback]
     async fn handle_update_all(&self, _button: gtk::Button) {
@@ -153,68 +165,91 @@ impl Window {
     }
     #[template_callback]
     async fn handle_action(&self, button: gtk::Button) {
-        if let Some((tree_model, tree_iter)) = self.tree_view.selection().selected() {
-            let provider_name = self.combobox_text();
-            let package = tree_model
-                .get_value(&tree_iter, 4 as i32)
-                .get::<String>()
-                .unwrap();
-            let buffer = TextBuffer::builder().text("").build();
-            let action = button.label().unwrap();
-            let providers = self.providers.borrow();
-            self.text_command.set_buffer(Some(&buffer));
-            let password = match self.password(&providers).await {
-                Some(value) => value,
-                _ => return,
-            };
-            self.goto_command();
-            let handle = match action.as_str() {
-                "Install" => providers.install(&provider_name, &package, &buffer, &password),
-                "Remove" => providers.remove(&provider_name, &package, &buffer, &password),
-                _ => return,
-            };
-            self.command_finished(handle);
-        }
+        let item = self.selected_item();
+        let item = match item {
+            Some(value) => value,
+            None => return
+        };
+        let provider_name = self.combobox_text();
+        let buffer = TextBuffer::builder().text("").build();
+        let action = button.label().unwrap();
+        let providers = self.providers.borrow();
+        self.text_command.set_buffer(Some(&buffer));
+        let password = match self.password(&providers).await {
+            Some(value) => value,
+            _ => return,
+        };
+        self.goto_command();
+        let handle = match action.as_str() {
+            "Install" => providers.install(&provider_name, &item.qualifiedName(), &buffer, &password),
+            "Remove" => providers.remove(&provider_name, &item.qualifiedName(), &buffer, &password),
+            _ => return,
+        };
+        self.command_finished(handle);
     }
     #[template_callback]
     fn handle_combobox_changed(&self, combobox: gtk::ComboBoxText) {
-        if let Some(combobox_text) = combobox.active_text() {
-            let mut providers = self.providers.borrow_mut();
-            let combobox_text = combobox_text.as_str();
-            self.update.set_sensitive(true);
-            let provider = providers.model(combobox_text);
-            let provider = match provider {
-                Ok(value) => value,
-                Err(value) => {
-                    messagebox::error("Error while changing provider", &value, self.window());
-                    return;
-                }
-            };
-            let filter = TreeModelFilter::new(&provider, None);
-            let sort = TreeModelSort::with_model(&filter);
-            let search = self.search_entry.clone();
-            filter.set_visible_func(move |model, iter| {
-                let value = search.text();
-                let value = value.as_str();
-                let package = model.get_value(iter, 4 as i32).get::<String>().unwrap();
-                package.contains(value)
-            });
-            self.tree_view.set_model(Some(&sort));
-            self.list_filter.replace(Some(filter));
-        }
+        let combobox_text = match combobox.active_text() {
+            Some(value) => value,
+            None => return,
+        };
+        let combobox_text = combobox_text.as_str();
+        let mut providers = self.providers.borrow_mut();
+        let provider = match providers.model(combobox_text) {
+            Ok(value) => value,
+            Err(value) => {
+                messagebox::error("Error while changing provider", &value, self.window());
+                return;
+            }
+        };
+        self.filter_list.set_model(Some(&provider));
+        self.single_selection.set_model(Some(&self.filter_list));
     }
     #[template_callback]
-    fn handle_search(&self, _search: &gtk::SearchEntry) {
-        self.tree_selection.unselect_all();
-        self.tree_selection.set_mode(gtk::SelectionMode::None);
-        if let Ok(mut filter) = self.list_filter.try_borrow_mut() {
-            let list_filter = match &mut *filter {
-                Some(value) => value,
-                _ => return,
-            };
-            list_filter.refilter();
-            self.tree_selection.set_mode(gtk::SelectionMode::Single);
-        }
+    fn signal_check_setup_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
+        item.set_child(Some(&grid_check::GridCheck::new()))
+    }
+    #[template_callback]
+    fn signal_text_setup_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
+        item.set_child(Some(&grid_text::GridText::new()))
+    }
+    #[template_callback]
+    fn signal_installed_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
+        let entry = item.item().and_downcast::<PackageObject>().unwrap();
+        let child = item
+            .child()
+            .and_downcast::<grid_check::GridCheck>()
+            .unwrap();
+        let ent = grid_check::Entry {
+            check: entry.installed(),
+            sensitive: false
+        };
+        child.set_entry(&ent);
+    }
+    #[template_callback]
+    fn signal_name_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
+        let entry = item.item().and_downcast::<PackageObject>().unwrap();
+        signal_text_bind_handler(item, entry.name().to_string());
+    }
+    #[template_callback]
+    fn signal_version_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
+        let entry = item.item().and_downcast::<PackageObject>().unwrap();
+        signal_text_bind_handler(item, entry.version().to_string());
+    }
+    #[template_callback]
+    fn signal_repository_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
+        let entry = item.item().and_downcast::<PackageObject>().unwrap();
+        signal_text_bind_handler(item, entry.repository().to_string());
+    }
+    #[template_callback]
+    fn handle_search(&self, search: &gtk::SearchEntry) {
+        self.single_selection.unselect_all();
+        let value = search.text().to_ascii_lowercase();
+        let filter = gtk::CustomFilter::new(move |obj| {
+            let obj = obj.downcast_ref::<PackageObject>().unwrap();
+            obj.qualifiedName().to_ascii_lowercase().contains(&value)
+        });
+        self.filter_list.set_filter(Some(&filter));
     }
     #[template_callback]
     async fn handle_update(&self, _button: gtk::Button) {
@@ -289,6 +324,11 @@ impl Window {
         }
         Some(SecStr::from(""))
     }
+}
+fn signal_text_bind_handler(item: gtk::ListItem, value: String) {
+    let child = item.child().and_downcast::<grid_text::GridText>().unwrap();
+    let ent = grid_text::Entry { name: value };
+    child.set_entry(&ent);
 }
 
 impl WidgetImpl for Window {}

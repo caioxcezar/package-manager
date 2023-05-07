@@ -10,6 +10,7 @@
           <object class="GtkSearchEntry" id="search_entry">
             <property name="hexpand">true</property>
             <property name="hexpand">true</property>
+            <property name="search-delay">500</property>
             <property name="placeholder-text" translatable="yes">Search Value</property>
             <signal name="search-changed" handler="handle_search" swapped="true" />
           </object>
@@ -48,75 +49,65 @@
                     <property name="position">400</property>
                     <child>
                       <object class="GtkScrolledWindow">
+                        <property name="hexpand">true</property>
+                        <property name="vexpand">true</property>
                         <child>
-                          <object class="GtkTreeView" id="tree_view">
-                            <property name="enable_search">false</property>
-                            <property name="hexpand">true</property>
-                            <property name="vexpand">true</property>
-                            <property name="headers-visible">true</property>
-                            <child internal-child="selection">
-                              <object class="GtkTreeSelection" id="tree_selection">
-                                <signal name="changed" handler="treeview_selection_changed" swapped="true" />
+                          <object class="GtkColumnView" id="column_view">
+                            <property name="model">
+                              <object class="GtkSingleSelection" id="single_selection">
+                                <signal name="selection-changed" handler="selection_changed" swapped="true" />
                               </object>
-                            </child>
+                            </property>
                             <child>
-                              <object class="GtkTreeViewColumn" id="installed-column">
+                              <object class="GtkColumnViewColumn" id="column_installed">
                                 <property name="title">Installed</property>
-                                <property name="sort-column-id">0</property>
-                                <child>
-                                  <object class="GtkCellRendererToggle" id="installed_renderer" />
-                                  <attributes>
-                                    <attribute name="active">0</attribute>
-                                  </attributes>
-                                </child>
+                                <property name="resizable">0</property>
+                                <property name="expand">FALSE</property>
+                                <property name="factory">
+                                  <object class="GtkSignalListItemFactory">
+                                    <signal name="setup" handler="signal_check_setup_handler" />
+                                    <signal name="bind" handler="signal_installed_bind_handler" />
+                                  </object>
+                                </property>
                               </object>
                             </child>
                             <child>
-                              <object class="GtkTreeViewColumn" id="repo-column">
-                                <property name="title">Repository</property>
-                                <property name="sort-column-id">1</property>
-                                <child>
-                                  <object class="GtkCellRendererText" id="repo-renderer" />
-                                  <attributes>
-                                    <attribute name="text">1</attribute>
-                                  </attributes>
-                                </child>
-                              </object>
-                            </child>
-                            <child>
-                              <object class="GtkTreeViewColumn" id="name-column">
+                              <object class="GtkColumnViewColumn" id="column_name">
                                 <property name="title">Name</property>
-                                <property name="sort-column-id">2</property>
-                                <child>
-                                  <object class="GtkCellRendererText" id="name-renderer" />
-                                  <attributes>
-                                    <attribute name="text">2</attribute>
-                                  </attributes>
-                                </child>
+                                <property name="resizable">1</property>
+                                <property name="expand">TRUE</property>
+                                <property name="factory">
+                                  <object class="GtkSignalListItemFactory">
+                                    <signal name="setup" handler="signal_text_setup_handler" />
+                                    <signal name="bind" handler="signal_name_bind_handler" />
+                                  </object>
+                                </property>
                               </object>
                             </child>
                             <child>
-                              <object class="GtkTreeViewColumn" id="version-column">
+                              <object class="GtkColumnViewColumn" id="column_version">
                                 <property name="title">Version</property>
-                                <property name="sort-column-id">3</property>
-                                <child>
-                                  <object class="GtkCellRendererText" id="version-renderer" />
-                                  <attributes>
-                                    <attribute name="text">3</attribute>
-                                  </attributes>
-                                </child>
+                                <property name="resizable">1</property>
+                                <property name="expand">TRUE</property>
+                                <property name="factory">
+                                  <object class="GtkSignalListItemFactory">
+                                    <signal name="setup" handler="signal_text_setup_handler" />
+                                    <signal name="bind" handler="signal_version_bind_handler" />
+                                  </object>
+                                </property>
                               </object>
                             </child>
                             <child>
-                              <object class="GtkTreeViewColumn" id="qualified-name">
-                                <property name="title">Qualified Name</property>
-                                <property name="visible">false</property>
-                                <child>
-                                  <object class="GtkCellRendererText" id="qualified-renderer" />
-                                  <attributes>
-                                    <attribute name="text">4</attribute>
-                                  </attributes>
-                                </child>
+                              <object class="GtkColumnViewColumn" id="column_repository">
+                                <property name="title">Repository</property>
+                                <property name="resizable">1</property>
+                                <property name="expand">TRUE</property>
+                                <property name="factory">
+                                  <object class="GtkSignalListItemFactory">
+                                    <signal name="setup" handler="signal_text_setup_handler" />
+                                    <signal name="bind" handler="signal_repository_bind_handler" />
+                                  </object>
+                                </property>
                               </object>
                             </child>
                           </object>

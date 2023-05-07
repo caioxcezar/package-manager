@@ -2,6 +2,8 @@
 <gresources>
     <gresource prefix="/org/caioxcezar/packagemanager">
         <file compressed="true" preprocess="xml-stripblanks">window.ui</file>
+        <file compressed="true" preprocess="xml-stripblanks">grid_text.ui</file>
+        <file compressed="true" preprocess="xml-stripblanks">grid_check.ui</file>
         <file compressed="true" preprocess="xml-stripblanks">help-overlay.ui</file>
         <file alias="package_manager.svg">package_manager.svg</file>
     </gresource>
