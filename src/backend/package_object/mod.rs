@@ -18,7 +18,7 @@ impl PackageObject {
             .build()
     }
 }
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct PackageData {
     pub installed: bool,
     pub repository: String,

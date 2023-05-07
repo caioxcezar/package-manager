@@ -5,11 +5,11 @@ use rayon::prelude::*;
 use regex::Regex;
 use secstr::SecVec;
 
-use crate::backend::{command, package::Package, provider::Provider};
+use crate::backend::{command, provider::Provider, package_object::PackageData};
 #[derive(Clone)]
 pub struct Dnf {
     name: String,
-    packages: Vec<Package>,
+    packages: Vec<PackageData>,
     installed: usize,
     total: usize,
     root_required: bool,
@@ -38,7 +38,7 @@ impl Provider for Dnf {
     fn name(&self) -> String {
         self.name.clone()
     }
-    fn packages(&self) -> Vec<Package> {
+    fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
     fn load_packages(&mut self) -> Result<(), String> {
@@ -66,20 +66,19 @@ impl Provider for Dnf {
                     if list_package.len() < 2 {
                         return None;
                     }
-                    Some(Package {
-                        provider: String::from("Dnf"),
+                    Some(PackageData {
                         repository: String::from(list_package[2].trim()),
                         name: String::from(list_package[0].trim()),
                         qualified_name: String::from(list_package[0].trim()),
                         version: String::from(list_package[1].trim()), 
-                        is_installed: position == 0
+                        installed: position == 0
                     })
                 })
-                .collect::<Vec<Package>>());
+                .collect::<Vec<PackageData>>());
             position += 1;
         }
 
-        self.installed = self.packages.par_iter().filter(|&p| p.is_installed).count();
+        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
         self.total = self.packages.len();
         Ok(())
     }

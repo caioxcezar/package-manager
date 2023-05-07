@@ -40,7 +40,7 @@ impl Providers {
         // Filling up the tree view.
         for value in &packages {
             list_store.append(&PackageObject::new(
-                value.is_installed,
+                value.installed,
                 value.repository.to_owned(),
                 value.name.to_owned(),
                 value.version.to_owned(),
