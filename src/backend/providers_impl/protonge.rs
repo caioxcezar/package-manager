@@ -32,6 +32,16 @@ struct ApiAssets {
 }
 
 pub fn init() -> ProtonGE {
+    let home = command::run("echo $HOME").unwrap();
+    let home = home.trim();
+    let mut folder_path: &str = "";
+    if Path::new(&format!("{}{}", home, "/.steam")).exists() {
+        folder_path = "/.steam/root/compatibilitytools.d";
+    }
+    if Path::new(&format!("{}{}", home, "/.var/app/com.valvesoftware.Steam")).exists() {
+        folder_path =
+            "/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d";
+    }
     ProtonGE {
         name: String::from("Proton GE"),
         packages: Vec::new(),
@@ -41,7 +51,7 @@ pub fn init() -> ProtonGE {
         endpoint: String::from(
             "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases",
         ),
-        folder_path: String::from("/.steam/root/compatibilitytools.d"),
+        folder_path: folder_path.to_string(),
         packages_description: Vec::new(),
     }
 }
@@ -182,10 +192,14 @@ impl Provider for ProtonGE {
 }
 impl ProtonGE {
     fn api_package_data(&self, tag_name: &str) -> Option<&ApiResponse> {
-        self.packages_description.par_iter().find_any(|response| response.tag_name.eq(tag_name))
+        self.packages_description
+            .par_iter()
+            .find_any(|response| response.tag_name.eq(tag_name))
     }
     fn package(&self, name: &str) -> Option<&PackageData> {
-        self.packages.par_iter().find_any(|package| package.name.eq(name))
+        self.packages
+            .par_iter()
+            .find_any(|package| package.name.eq(name))
     }
     fn download(
         &self,
@@ -206,15 +220,25 @@ impl ProtonGE {
     }
     fn proton_location(&self) -> String {
         let home = command::run("echo $HOME").unwrap();
-        if !Path::new(&format!("{}{}", home.trim(), &self.folder_path)).exists() {
-            let _ = fs::create_dir_all(format!("{}{}", home.trim(), &self.folder_path));
+        let home = home.trim();
+        let path = format!("{}{}", home, &self.folder_path);
+        if !Path::new(&path).exists() {
+            let _ = fs::create_dir_all(format!("{}{}", home, &self.folder_path));
         }
-        let home = command::run("echo $HOME").unwrap();
-        format!("{}{}", home.trim(), &self.folder_path)
+        path
     }
 }
 pub fn is_available() -> bool {
-    if cfg!(windows) { return false; }
+    if cfg!(windows) {
+        return false;
+    }
+    let home = command::run("echo $HOME").unwrap();
+    let home = home.trim();
+    if !Path::new(&format!("{}{}", home, "/.steam")).exists()
+        && !Path::new(&format!("{}{}", home, "/.var/app/com.valvesoftware.Steam")).exists()
+    {
+        return false;
+    }
     match api::get_str("https://api.github.com/zen") {
         Ok(_) => true,
         _ => false,
