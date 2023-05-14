@@ -63,6 +63,7 @@
                           <object class="GtkColumnView" id="column_view">
                             <property name="model">
                               <object class="GtkSingleSelection" id="single_selection">
+                                <property name="autoselect">false</property>
                                 <signal name="selection-changed" handler="selection_changed"
                                   swapped="true" />
                               </object>
