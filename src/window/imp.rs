@@ -41,6 +41,7 @@ pub struct Window {
     pub splash: TemplateChild<gtk::Picture>,
     pub filter_list: gtk::FilterListModel,
     providers: RefCell<Providers>,
+    password: RefCell<Option<SecVec<u8>>>,
 }
 
 #[glib::object_subclass]
@@ -141,6 +142,7 @@ impl Window {
         if providers.some_root_required() {
             password = messagebox::ask_password(self.window()).await;
         }
+        self.password.replace(password.clone());
         let password = match password {
             Some(value) => value,
             _ => return,
@@ -217,8 +219,15 @@ impl Window {
         self.single_selection.set_model(Some(&self.filter_list));
 
         self.header_bar.show();
-        let widget = self.stack.child_by_name("main_page").unwrap();
-        self.stack.set_visible_child(&widget);
+        let current_page = self.stack.visible_child_name();
+        let current_page = match current_page {
+            Some(v) => v.to_string(),
+            None => "splash".to_string()
+        };
+        if current_page == "splash" {
+            let widget = self.stack.child_by_name("main_page").unwrap();
+            self.stack.set_visible_child(&widget);
+        }
     }
     #[template_callback]
     fn signal_check_setup_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
@@ -334,10 +343,16 @@ impl Window {
             .map(|root| root.downcast::<gtk::Window>().unwrap())
     }
     async fn password(&self, providers: &Providers) -> Option<SecVec<u8>> {
-        if providers.is_root_required(&self.combobox_text()) {
-            return messagebox::ask_password(self.window()).await;
+        let password: Option<SecVec<u8>> = self.password.borrow().clone();
+        if password.is_some() {
+            password
+        } else if providers.is_root_required(&self.combobox_text()) {
+            let password = messagebox::ask_password(self.window()).await;
+            self.password.replace(password.clone());
+            password
+        } else {
+            Some(SecStr::from(""))
         }
-        Some(SecStr::from(""))
     }
 }
 fn signal_text_bind_handler(item: gtk::ListItem, value: String) {
