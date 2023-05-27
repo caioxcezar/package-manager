@@ -32,7 +32,7 @@ impl Provider for Pacman {
         self.total
     }
     fn is_root_required(&self) -> bool {
-        self.root_required.clone()
+        self.root_required
     }
     fn name(&self) -> String {
         self.name.clone()
@@ -97,10 +97,7 @@ impl Provider for Pacman {
 }
 pub fn is_available() -> bool {
     let packages = command::run("pacman --version");
-    match packages {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    packages.is_ok()
 }
 
 fn command_build(password: &SecVec<u8>, command: String) -> String {

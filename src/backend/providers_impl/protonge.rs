@@ -39,8 +39,7 @@ pub fn init() -> ProtonGE {
         folder_path = "/.steam/root/compatibilitytools.d";
     }
     if Path::new(&format!("{}{}", home, "/.var/app/com.valvesoftware.Steam")).exists() {
-        folder_path =
-            "/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d";
+        folder_path = "/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d";
     }
     ProtonGE {
         name: String::from("Proton GE"),
@@ -59,7 +58,7 @@ pub fn init() -> ProtonGE {
 impl Provider for ProtonGE {
     fn load_packages(&mut self) -> Result<(), String> {
         let proton_location = self.proton_location();
-        let proton_dir = fs::read_dir(&proton_location).unwrap();
+        let proton_dir = fs::read_dir(proton_location).unwrap();
         let proton: Vec<String> = proton_dir
             .filter_map(|dir| {
                 let entry = dir.unwrap();
@@ -239,8 +238,5 @@ pub fn is_available() -> bool {
     {
         return false;
     }
-    match api::get_str("https://api.github.com/zen") {
-        Ok(_) => true,
-        _ => false,
-    }
+    api::get_str("https://api.github.com/zen").is_ok()
 }

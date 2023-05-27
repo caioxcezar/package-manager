@@ -1,10 +1,10 @@
 mod application;
 mod backend;
 mod constants;
+mod grid_check;
+mod grid_text;
 mod messagebox;
 mod window;
-mod grid_text;
-mod grid_check;
 
 use application::PackageManagerApplication;
 use gtk::gio;

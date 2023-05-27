@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use regex::Regex;
 use secstr::SecVec;
 
-use crate::backend::{command, provider::Provider, package_object::PackageData};
+use crate::backend::{command, package_object::PackageData, provider::Provider};
 #[derive(Clone)]
 pub struct Dnf {
     name: String,
@@ -33,7 +33,7 @@ impl Provider for Dnf {
         self.total
     }
     fn is_root_required(&self) -> bool {
-        self.root_required.clone()
+        self.root_required
     }
     fn name(&self) -> String {
         self.name.clone()
@@ -55,27 +55,32 @@ impl Provider for Dnf {
             .collect::<Vec<&str>>();
 
         let seperator = Regex::new(r"[\s,]+").expect("Invalid regex");
-        let mut position = 0;
-        for packages in grp_packages {
-            let pkgs = if position == 0 { packages.replace("Installed Packages\n", "") } else { packages.to_owned() };
+
+        for (position, packages) in grp_packages.iter().enumerate() {
+            let pkgs = if position == 0 {
+                packages.replace("Installed Packages\n", "")
+            } else {
+                packages.to_string()
+            };
             let pkgs = pkgs.par_split('\n').collect::<Vec<&str>>();
-            self.packages.append(&mut pkgs
-                .par_iter()
-                .filter_map(|package| {
-                    let list_package: Vec<&str> = seperator.split(&package).collect();
-                    if list_package.len() < 2 {
-                        return None;
-                    }
-                    Some(PackageData {
-                        repository: String::from(list_package[2].trim()),
-                        name: String::from(list_package[0].trim()),
-                        qualified_name: String::from(list_package[0].trim()),
-                        version: String::from(list_package[1].trim()), 
-                        installed: position == 0
+            self.packages.append(
+                &mut pkgs
+                    .par_iter()
+                    .filter_map(|package| {
+                        let list_package: Vec<&str> = seperator.split(package).collect();
+                        if list_package.len() < 2 {
+                            return None;
+                        }
+                        Some(PackageData {
+                            repository: String::from(list_package[2].trim()),
+                            name: String::from(list_package[0].trim()),
+                            qualified_name: String::from(list_package[0].trim()),
+                            version: String::from(list_package[1].trim()),
+                            installed: position == 0,
+                        })
                     })
-                })
-                .collect::<Vec<PackageData>>());
-            position += 1;
+                    .collect::<Vec<PackageData>>(),
+            );
         }
 
         self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
@@ -85,23 +90,39 @@ impl Provider for Dnf {
     fn package_info(&self, package: &str) -> String {
         command::run(&format!("dnf info {}", package)).unwrap()
     }
-    fn install(&self, password: &SecVec<u8>, package: &str, text_buffer: &TextBuffer) -> JoinHandle<bool> {
+    fn install(
+        &self,
+        password: &SecVec<u8>,
+        package: &str,
+        text_buffer: &TextBuffer,
+    ) -> JoinHandle<bool> {
         let pass = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        command::run_stream(format!("echo '{}' | sudo -S dnf install {} -y", pass, package), text_buffer)
+        command::run_stream(
+            format!("echo '{}' | sudo -S dnf install {} -y", pass, package),
+            text_buffer,
+        )
     }
-    fn remove(&self, password: &SecVec<u8>, package: &str, text_buffer: &TextBuffer) -> JoinHandle<bool> {
+    fn remove(
+        &self,
+        password: &SecVec<u8>,
+        package: &str,
+        text_buffer: &TextBuffer,
+    ) -> JoinHandle<bool> {
         let pass = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        command::run_stream(format!("echo '{}' | sudo -S dnf remove {} -y", pass, package), text_buffer)
+        command::run_stream(
+            format!("echo '{}' | sudo -S dnf remove {} -y", pass, package),
+            text_buffer,
+        )
     }
     fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
         let pass = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        command::run_stream(format!("echo '{}' | sudo -S dnf update -y", pass), text_buffer)
+        command::run_stream(
+            format!("echo '{}' | sudo -S dnf update -y", pass),
+            text_buffer,
+        )
     }
 }
 pub fn is_available() -> bool {
     let packages = command::run("dnf --version");
-    match packages {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    packages.is_ok()
 }
