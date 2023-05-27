@@ -15,7 +15,7 @@ glib::wrapper! {
 impl PackageManagerApplication {
     pub fn new(application_id: &str) -> Self {
         glib::Object::builder()
-            .property("application-id", &application_id)
+            .property("application-id", application_id)
             .build()
     }
 

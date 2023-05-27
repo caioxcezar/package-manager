@@ -27,7 +27,7 @@ impl ApplicationImpl for PackageManagerApplication {
         let window = if let Some(window) = application.active_window() {
             window
         } else {
-            let window = Window::new(&*application);
+            let window = Window::new(&application);
             window.upcast()
         };
         window.present();

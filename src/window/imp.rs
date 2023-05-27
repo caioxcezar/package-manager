@@ -75,12 +75,11 @@ impl ObjectImpl for Window {
         {
             let providers = providers::init();
 
-            for provider in &providers.list {
-                let p = provider.name();
-                self.combobox_provider.append_text(&p);
+            for provider in &providers.avaible_providers {
+                self.combobox_provider.append_text(provider);
             }
 
-            if providers.list.len() == 0 {
+            if providers.avaible_providers.is_empty() {
                 self.update_all.set_sensitive(false);
                 self.update.set_sensitive(false);
             }
@@ -124,7 +123,7 @@ impl Window {
                 return;
             }
         };
-        let buffer = TextBuffer::builder().text(&info).build();
+        let buffer = TextBuffer::builder().text(info).build();
         self.text_box.set_buffer(Some(&buffer));
         self.text_box.set_visible(true);
 
@@ -137,10 +136,11 @@ impl Window {
     }
     #[template_callback]
     async fn handle_update_all(&self, _button: gtk::Button) {
-        let providers = self.providers.borrow();
         let mut password = None;
-        if providers.some_root_required() {
-            password = messagebox::ask_password(self.window()).await;
+        {
+            if self.providers.borrow().some_root_required() {
+                password = messagebox::ask_password(self.window()).await;
+            }
         }
         self.password.replace(password.clone());
         let password = match password {
@@ -172,7 +172,7 @@ impl Window {
         });
 
         self.text_command.set_buffer(Some(&buffer));
-        providers.update_all(&buffer, &password);
+        self.providers.borrow().update_all(&buffer, &password);
     }
     #[template_callback]
     async fn handle_action(&self, button: gtk::Button) {
@@ -184,13 +184,13 @@ impl Window {
         let provider_name = self.combobox_text();
         let buffer = TextBuffer::builder().text("").build();
         let action = button.label().unwrap();
-        let providers = self.providers.borrow();
         self.text_command.set_buffer(Some(&buffer));
-        let password = match self.password(&providers).await {
+        let password = match self.password().await {
             Some(value) => value,
             _ => return,
         };
         self.goto_command();
+        let providers = self.providers.borrow();
         let handle = match action.as_str() {
             "Install" => {
                 providers.install(&provider_name, &item.qualifiedName(), &buffer, &password)
@@ -207,7 +207,7 @@ impl Window {
             None => return,
         };
         let combobox_text = combobox_text.as_str();
-        let mut providers = self.providers.borrow_mut();
+        let providers = self.providers.borrow_mut();
         let provider = match providers.model(combobox_text) {
             Ok(value) => value,
             Err(value) => {
@@ -222,7 +222,7 @@ impl Window {
         let current_page = self.stack.visible_child_name();
         let current_page = match current_page {
             Some(v) => v.to_string(),
-            None => "splash".to_string()
+            None => "splash".to_string(),
         };
         if current_page == "splash" {
             let widget = self.stack.child_by_name("main_page").unwrap();
@@ -253,17 +253,17 @@ impl Window {
     #[template_callback]
     fn signal_name_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
         let entry = item.item().and_downcast::<PackageObject>().unwrap();
-        signal_text_bind_handler(item, entry.name().to_string());
+        signal_text_bind_handler(item, entry.name());
     }
     #[template_callback]
     fn signal_version_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
         let entry = item.item().and_downcast::<PackageObject>().unwrap();
-        signal_text_bind_handler(item, entry.version().to_string());
+        signal_text_bind_handler(item, entry.version());
     }
     #[template_callback]
     fn signal_repository_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
         let entry = item.item().and_downcast::<PackageObject>().unwrap();
-        signal_text_bind_handler(item, entry.repository().to_string());
+        signal_text_bind_handler(item, entry.repository());
     }
     #[template_callback]
     fn handle_search(&self, search: &gtk::SearchEntry) {
@@ -277,16 +277,15 @@ impl Window {
     }
     #[template_callback]
     async fn handle_update(&self, _button: gtk::Button) {
-        let providers = self.providers.borrow();
         let buffer = TextBuffer::builder().text("").build();
         self.text_command.set_buffer(Some(&buffer));
-        let password = match self.password(&providers).await {
+        let password = match self.password().await {
             Some(value) => value,
             _ => return,
         };
         let str_prd = self.combobox_text();
         self.goto_command();
-        let handle = providers.update(&str_prd, &buffer, &password);
+        let handle = self.providers.borrow().update(&str_prd, &buffer, &password);
         self.command_finished(handle);
     }
     #[template_callback]
@@ -342,11 +341,15 @@ impl Window {
             .root()
             .map(|root| root.downcast::<gtk::Window>().unwrap())
     }
-    async fn password(&self, providers: &Providers) -> Option<SecVec<u8>> {
+    async fn password(&self) -> Option<SecVec<u8>> {
         let password: Option<SecVec<u8>> = self.password.borrow().clone();
         if password.is_some() {
             password
-        } else if providers.is_root_required(&self.combobox_text()) {
+        } else if self
+            .providers
+            .borrow()
+            .is_root_required(&self.combobox_text())
+        {
             let password = messagebox::ask_password(self.window()).await;
             self.password.replace(password.clone());
             password

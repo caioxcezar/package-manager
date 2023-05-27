@@ -4,7 +4,7 @@ use gtk::TextBuffer;
 use rayon::prelude::*;
 use secstr::SecVec;
 
-use crate::backend::{command, provider::Provider, package_object::PackageData};
+use crate::backend::{command, package_object::PackageData, provider::Provider};
 #[derive(Clone)]
 pub struct Flatpak {
     name: String,
@@ -32,7 +32,7 @@ impl Provider for Flatpak {
         self.total
     }
     fn is_root_required(&self) -> bool {
-        self.root_required.clone()
+        self.root_required
     }
     fn name(&self) -> String {
         self.name.clone()
@@ -74,21 +74,26 @@ impl Provider for Flatpak {
                 Err(err) => return Err(format!("{:?}", err)),
             };
             let packages: Vec<&str> = packages.split('\n').collect();
-            self.packages.append(&mut packages.par_iter().filter_map(|str_package| {
-                let arr_package: Vec<&str> = str_package.split('\t').collect();
-                if arr_package.len() < 2 {
-                    return None;
-                }
-                Some(PackageData {
-                    repository: String::from(arr_remote[0]),
-                    name: String::from(arr_package[0]),
-                    qualified_name: String::from(arr_package[1]),
-                    version: String::from(arr_package[2]),
-                    installed: installed_packages
+            self.packages.append(
+                &mut packages
                     .par_iter()
-                    .any(|f| f.contains(arr_package[1])),
-                })
-            }).collect::<Vec<PackageData>>());
+                    .filter_map(|str_package| {
+                        let arr_package: Vec<&str> = str_package.split('\t').collect();
+                        if arr_package.len() < 2 {
+                            return None;
+                        }
+                        Some(PackageData {
+                            repository: String::from(arr_remote[0]),
+                            name: String::from(arr_package[0]),
+                            qualified_name: String::from(arr_package[1]),
+                            version: String::from(arr_package[2]),
+                            installed: installed_packages
+                                .par_iter()
+                                .any(|f| f.contains(arr_package[1])),
+                        })
+                    })
+                    .collect::<Vec<PackageData>>(),
+            );
         }
         self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
         self.total = self.packages.len();
@@ -96,7 +101,7 @@ impl Provider for Flatpak {
     }
     fn package_info(&self, package: &str) -> String {
         let response = command::run(&format!("flatpak search {}", package)).unwrap();
-        response.replace("\t", "\n")
+        response.replace('\t', "\n")
     }
     fn install(&self, _: &SecVec<u8>, package: &str, text_buffer: &TextBuffer) -> JoinHandle<bool> {
         command::run_stream(format!("flatpak install {} -y", package), text_buffer)
@@ -110,8 +115,5 @@ impl Provider for Flatpak {
 }
 pub fn is_available() -> bool {
     let packages = command::run("flatpak --version");
-    match packages {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    packages.is_ok()
 }

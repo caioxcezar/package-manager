@@ -9,29 +9,11 @@ use std::thread::{self, JoinHandle};
 
 #[derive(Default)]
 pub struct Providers {
-    pub list: Vec<Box<dyn Provider>>,
+    pub avaible_providers: Vec<String>,
 }
 impl Providers {
-    /// Tecnicamente impossível voltar None
-    fn provider(&self, provider_name: &str) -> Option<&Box<dyn Provider>> {
-        for prov in &self.list {
-            if provider_name.eq(&prov.name()) {
-                return Some(prov);
-            }
-        }
-        None
-    }
-    pub fn model(&mut self, name: &str) -> Result<ListStore, String> {
-        let mut provider = None;
-        for prov in &mut self.list {
-            if name.eq(&prov.name()) {
-                provider = Some(prov);
-            }
-        }
-        let provider = match provider {
-            Some(value) => value,
-            _ => return Err("Provider not found. ".to_owned()),
-        };
+    pub fn model(&self, name: &str) -> Result<ListStore, String> {
+        let mut provider = provider(name);
         if let Err(value) = provider.load_packages() {
             return Err(format!("Error while loading packages. {}", value));
         }
@@ -55,16 +37,12 @@ impl Providers {
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
-        let provider = self.provider(&provider_name).unwrap();
-        provider.update(&password, text_buffer)
+        let provider = provider(provider_name);
+        provider.update(password, text_buffer)
     }
-    pub fn package_info(&self, provider_name: &str, provider: &str) -> Result<String, String> {
-        let provider = self.provider(provider);
-        let provider = match provider {
-            Some(value) => value,
-            _ => return Err("Provider not found".to_owned()),
-        };
-        Ok(provider.package_info(&provider_name))
+    pub fn package_info(&self, package_name: &str, provider_name: &str) -> Result<String, String> {
+        let provider = provider(provider_name);
+        Ok(provider.package_info(package_name))
     }
     pub fn install(
         &self,
@@ -73,7 +51,7 @@ impl Providers {
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
-        let provider = self.provider(&provider_name).unwrap();
+        let provider = provider(provider_name);
         provider.install(password, package, text_buffer)
     }
     pub fn remove(
@@ -83,61 +61,89 @@ impl Providers {
         text_buffer: &TextBuffer,
         password: &SecVec<u8>,
     ) -> JoinHandle<bool> {
-        let provider = self.provider(provider_name).unwrap();
-        provider.remove(&password, package, text_buffer)
+        let provider = provider(provider_name);
+        provider.remove(password, package, text_buffer)
     }
     pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) {
-        let mut packages_name = Vec::new();
-        for package in &self.list {
-            packages_name.push(package.name());
-        }
-        inner_update_all(&mut packages_name, text_buffer, password);
+        let mut avaible_providers = self.avaible_providers.clone();
+        inner_update_all(&mut avaible_providers, text_buffer, password);
     }
     pub fn is_root_required(&self, provider_name: &str) -> bool {
-        let provider = self.provider(provider_name).unwrap();
+        let provider = provider(provider_name);
         provider.is_root_required()
     }
     pub fn some_root_required(&self) -> bool {
-        self.list
+        self.avaible_providers
             .iter()
-            .any(|value: &Box<dyn Provider>| value.is_root_required())
+            .any(|value| provider(value).is_root_required())
     }
 }
 pub fn init() -> Providers {
-    let mut prov = Providers { list: Vec::new() };
+    let mut providers = Vec::<String>::new();
     if dnf::is_available() {
-        prov.list.push(Box::new(dnf::init()));
+        providers.push(dnf::init().name())
     }
     if pacman::is_available() {
-        prov.list.push(Box::new(pacman::init()));
+        providers.push(pacman::init().name())
     }
     if paru::is_available() {
-        prov.list.push(Box::new(paru::init()));
+        providers.push(paru::init().name())
     }
     if winget::is_available() {
-        prov.list.push(Box::new(winget::init()));
+        providers.push(winget::init().name())
     }
     if flatpak::is_available() {
-        prov.list.push(Box::new(flatpak::init()));
+        providers.push(flatpak::init().name())
     }
     if protonge::is_available() {
-        prov.list.push(Box::new(protonge::init()));
+        providers.push(protonge::init().name())
     }
-    prov
+    Providers {
+        avaible_providers: providers,
+    }
 }
-fn provider(provider_name: &str) -> Option<Box<dyn Provider>> {
+// pub fn init() -> Providers {
+//     let mut prov = Providers {
+//         dnf_provider: None,
+//         pacman_provide: None,
+//         paru_provide: None,
+//         winget_provide: None,
+//         flatpak_provide: None,
+//         protonge_provide: None,
+//     };
+//     if dnf::is_available() {
+//         prov.dnf_provider = Some(dnf::init());
+//     }
+//     if pacman::is_available() {
+//         prov.pacman_provide = Some(pacman::init());
+//     }
+//     if paru::is_available() {
+//         prov.paru_provide = Some(paru::init());
+//     }
+//     if winget::is_available() {
+//         prov.winget_provide = Some(winget::init());
+//     }
+//     if flatpak::is_available() {
+//         prov.flatpak_provide = Some(flatpak::init());
+//     }
+//     if protonge::is_available() {
+//         prov.protonge_provide = Some(protonge::init());
+//     }
+//     prov
+// }
+fn provider(provider_name: &str) -> Box<dyn Provider> {
     match provider_name {
-        "Pacman" => Some(Box::new(pacman::init())),
-        "Flatpak" => Some(Box::new(flatpak::init())),
-        "Paru" => Some(Box::new(paru::init())),
+        "Pacman" => Box::new(pacman::init()),
+        "Flatpak" => Box::new(flatpak::init()),
+        "Paru" => Box::new(paru::init()),
         "Proton GE" => {
             let mut proton_ge = protonge::init();
             let _ = proton_ge.load_packages();
-            Some(Box::new(proton_ge))
+            Box::new(proton_ge)
         }
-        "Winget" => Some(Box::new(winget::init())),
-        "Dnf" => Some(Box::new(dnf::init())),
-        &_ => None,
+        "Winget" => Box::new(winget::init()),
+        "Dnf" => Box::new(dnf::init()),
+        &_ => panic!("Invalid Package"),
     }
 }
 fn inner_update_all(
@@ -145,14 +151,14 @@ fn inner_update_all(
     text_buffer: &TextBuffer,
     password: &SecVec<u8>,
 ) {
-    if provider_names.len() <= 0 {
+    if !provider_names.is_empty() {
         let mut text_iter = text_buffer.end_iter();
         text_buffer.insert(&mut text_iter, "\n:::: All Updated ::::");
         return;
     }
     let provider_name = provider_names.remove(0);
-    let provider = provider(&provider_name).unwrap();
-    let handle = provider.update(&password, &text_buffer);
+    let provider = provider(&provider_name);
+    let handle = provider.update(password, text_buffer);
 
     let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
     thread::spawn(move || {
@@ -165,7 +171,7 @@ fn inner_update_all(
     let mut provider_names = provider_names.clone();
 
     rx.attach(None, move |_| {
-        let _ = inner_update_all(&mut provider_names, &text_buffer_clone, &password_clone);
+        inner_update_all(&mut provider_names, &text_buffer_clone, &password_clone);
         glib::Continue(false)
     });
 }

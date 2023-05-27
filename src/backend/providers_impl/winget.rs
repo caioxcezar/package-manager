@@ -32,7 +32,7 @@ impl Provider for Winget {
         self.total
     }
     fn is_root_required(&self) -> bool {
-        self.root_required.clone()
+        self.root_required
     }
     fn name(&self) -> String {
         self.name.clone()
@@ -134,8 +134,5 @@ impl Provider for Winget {
 }
 pub fn is_available() -> bool {
     let packages = command::run("winget --version");
-    match packages {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    packages.is_ok()
 }

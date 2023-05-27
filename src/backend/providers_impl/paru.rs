@@ -32,7 +32,7 @@ impl Provider for Paru {
         self.total
     }
     fn is_root_required(&self) -> bool {
-        self.root_required.clone()
+        self.root_required
     }
     fn name(&self) -> String {
         self.name.clone()
@@ -95,8 +95,7 @@ impl Provider for Paru {
         let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
         let command = format!(
             "echo '{}' | sudo -S su && paru -Rsu {} --noconfirm",
-            password.to_string(),
-            package
+            password, package
         );
         command::run_stream(command, text_buffer)
     }
@@ -108,8 +107,5 @@ impl Provider for Paru {
 }
 pub fn is_available() -> bool {
     let packages = command::run("paru --version");
-    match packages {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    packages.is_ok()
 }
