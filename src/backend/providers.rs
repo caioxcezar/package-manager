@@ -65,8 +65,7 @@ impl Providers {
         provider.remove(password, package, text_buffer)
     }
     pub fn update_all(&self, text_buffer: &TextBuffer, password: &SecVec<u8>) {
-        let mut avaible_providers = self.avaible_providers.clone();
-        inner_update_all(&mut avaible_providers, text_buffer, password);
+        inner_update_all(self.avaible_providers.clone(), text_buffer, password);
     }
     pub fn is_root_required(&self, provider_name: &str) -> bool {
         let provider = provider(provider_name);
@@ -102,35 +101,7 @@ pub fn init() -> Providers {
         avaible_providers: providers,
     }
 }
-// pub fn init() -> Providers {
-//     let mut prov = Providers {
-//         dnf_provider: None,
-//         pacman_provide: None,
-//         paru_provide: None,
-//         winget_provide: None,
-//         flatpak_provide: None,
-//         protonge_provide: None,
-//     };
-//     if dnf::is_available() {
-//         prov.dnf_provider = Some(dnf::init());
-//     }
-//     if pacman::is_available() {
-//         prov.pacman_provide = Some(pacman::init());
-//     }
-//     if paru::is_available() {
-//         prov.paru_provide = Some(paru::init());
-//     }
-//     if winget::is_available() {
-//         prov.winget_provide = Some(winget::init());
-//     }
-//     if flatpak::is_available() {
-//         prov.flatpak_provide = Some(flatpak::init());
-//     }
-//     if protonge::is_available() {
-//         prov.protonge_provide = Some(protonge::init());
-//     }
-//     prov
-// }
+
 fn provider(provider_name: &str) -> Box<dyn Provider> {
     match provider_name {
         "Pacman" => Box::new(pacman::init()),
@@ -146,16 +117,13 @@ fn provider(provider_name: &str) -> Box<dyn Provider> {
         &_ => panic!("Invalid Package"),
     }
 }
-fn inner_update_all(
-    provider_names: &mut Vec<String>,
-    text_buffer: &TextBuffer,
-    password: &SecVec<u8>,
-) {
-    if !provider_names.is_empty() {
+fn inner_update_all(provider_names: Vec<String>, text_buffer: &TextBuffer, password: &SecVec<u8>) {
+    if provider_names.is_empty() {
         let mut text_iter = text_buffer.end_iter();
         text_buffer.insert(&mut text_iter, "\n:::: All Updated ::::");
         return;
     }
+    let mut provider_names = provider_names;
     let provider_name = provider_names.remove(0);
     let provider = provider(&provider_name);
     let handle = provider.update(password, text_buffer);
@@ -168,10 +136,9 @@ fn inner_update_all(
 
     let text_buffer_clone = text_buffer.clone();
     let password_clone = password.clone();
-    let mut provider_names = provider_names.clone();
 
     rx.attach(None, move |_| {
-        inner_update_all(&mut provider_names, &text_buffer_clone, &password_clone);
+        inner_update_all(provider_names.clone(), &text_buffer_clone, &password_clone);
         glib::Continue(false)
     });
 }
