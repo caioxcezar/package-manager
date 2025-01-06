@@ -4,8 +4,8 @@ use gtk::TextBuffer;
 use rayon::prelude::*;
 use secstr::SecVec;
 
-use crate::backend::{command, package_object::PackageData, provider::Provider};
-#[derive(Clone)]
+use crate::backend::{command, package_object::PackageData, provider::ProviderActions};
+#[derive(Clone, Debug)]
 pub struct Flatpak {
     name: String,
     packages: Vec<PackageData>,
@@ -14,17 +14,19 @@ pub struct Flatpak {
     root_required: bool,
 }
 
-pub fn init() -> Flatpak {
-    Flatpak {
-        name: String::from("Flatpak"),
-        packages: Vec::new(),
-        root_required: false,
-        installed: 0,
-        total: 0,
+impl Default for Flatpak {
+    fn default() -> Self {
+        Flatpak {
+            name: String::from("Flatpak"),
+            packages: Vec::new(),
+            root_required: false,
+            installed: 0,
+            total: 0,
+        }
     }
 }
 
-impl Provider for Flatpak {
+impl ProviderActions for Flatpak {
     fn installed(&self) -> usize {
         self.installed
     }
@@ -112,8 +114,8 @@ impl Provider for Flatpak {
     fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
         command::run_stream("flatpak update -y".to_owned(), text_buffer)
     }
-}
-pub fn is_available() -> bool {
-    let packages = command::run("flatpak --version");
-    packages.is_ok()
+    fn is_available(&self) -> bool {
+        let packages = command::run("flatpak --version");
+        packages.is_ok()
+    }
 }

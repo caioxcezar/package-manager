@@ -1,13 +1,16 @@
-use crate::backend::package_object::PackageObject;
-use crate::backend::providers::{self, Providers};
-use crate::{grid_check, grid_text, messagebox};
+use crate::{
+    backend::{package_object::PackageObject, provider::ProviderKind},
+    grid_check, grid_text, messagebox,
+};
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
-use gtk::prelude::*;
-use gtk::{glib, CompositeTemplate, TextBuffer};
+use gtk::{glib, prelude::*, CompositeTemplate, TextBuffer};
 use secstr::{SecStr, SecVec};
-use std::cell::RefCell;
-use std::thread::{self, JoinHandle};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    thread::{self, JoinHandle},
+};
+
 #[derive(CompositeTemplate, Default)]
 #[template(resource = "/org/caioxcezar/packagemanager/window.ui")]
 pub struct Window {
@@ -40,7 +43,7 @@ pub struct Window {
     #[template_child]
     pub splash: TemplateChild<gtk::Picture>,
     pub filter_list: gtk::FilterListModel,
-    providers: RefCell<Providers>,
+    providers: RefCell<Vec<ProviderKind>>,
     password: RefCell<Option<SecVec<u8>>>,
 }
 
@@ -73,17 +76,17 @@ impl ObjectImpl for Window {
 
         self.filter_list.set_incremental(true);
         {
-            let providers = providers::init();
+            let providers = ProviderKind::available_providers();
 
-            for provider in &providers.avaible_providers {
-                self.combobox_provider.append_text(provider);
+            for provider in &providers {
+                self.combobox_provider.append_text(&provider.name());
             }
 
-            if providers.avaible_providers.is_empty() {
+            if providers.is_empty() {
                 self.update_all.set_sensitive(false);
                 self.update.set_sensitive(false);
             }
-            self.providers.replace(providers);
+            // self.providers.replace(providers);
         }
         let combobox_provider = self.combobox_provider.clone();
         glib::source::idle_add_local_once(move || {
@@ -110,19 +113,8 @@ impl Window {
             Some(value) => value,
             None => return,
         };
-        let providers = self.providers.borrow();
-        let info = providers.package_info(&item.qualifiedName(), &self.combobox_text());
-        let info = match info {
-            Ok(value) => value,
-            Err(value) => {
-                messagebox::error(
-                    "Error While Changing",
-                    &format!("{:?}", value),
-                    self.window(),
-                );
-                return;
-            }
-        };
+        let provider = self.provider();
+        let info = provider.package_info(&item.qualifiedName());
         let buffer = TextBuffer::builder().text(info).build();
         self.text_box.set_buffer(Some(&buffer));
         self.text_box.set_visible(true);
@@ -137,10 +129,13 @@ impl Window {
     #[template_callback]
     async fn handle_update_all(&self, _button: gtk::Button) {
         let mut password = None;
-        {
-            if self.providers.borrow().some_root_required() {
-                password = messagebox::ask_password(self.window()).await;
-            }
+        let some_root_required = self
+            .providers
+            .borrow()
+            .iter()
+            .any(|provider| provider.is_root_required());
+        if some_root_required {
+            password = messagebox::ask_password(self.window()).await;
         }
         self.password.replace(password.clone());
         let password = match password {
@@ -149,30 +144,23 @@ impl Window {
         };
         self.goto_command();
 
-        let combobox_provider = self.combobox_provider.clone();
-        let info_bar_label = self.info_bar_label.clone();
-        let info_bar = self.info_bar.clone();
         let text_command = self.text_command.clone();
 
-        let u32_provider = self.combobox_provider.active();
         let buffer = TextBuffer::builder().text("").build();
-
         let _ = buffer.connect_changed(move |buff| {
-            let start = buff.iter_at_line(buff.line_count() - 1).unwrap();
             let mut end = buff.end_iter();
-            let line = buff.text(&start, &end, false);
-            let line = line.as_str();
-            if line.contains(":::: All Updated ::::") {
-                combobox_provider.set_active(u32_provider);
-                info_bar_label.set_text("Finished");
-                info_bar.set_visible(true);
-            }
-
             text_command.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
         });
 
         self.text_command.set_buffer(Some(&buffer));
-        self.providers.borrow().update_all(&buffer, &password);
+        for provider in self.providers.borrow().iter() {
+            let handle = provider.update(&password, &buffer);
+            let _ = handle.join();
+        }
+        self.combobox_provider
+            .set_active(self.combobox_provider.active());
+        self.info_bar_label.set_text("Finished");
+        self.info_bar.set_visible(true);
     }
     #[template_callback]
     async fn handle_action(&self, button: gtk::Button) {
@@ -181,7 +169,6 @@ impl Window {
             Some(value) => value,
             None => return,
         };
-        let provider_name = self.combobox_text();
         let buffer = TextBuffer::builder().text("").build();
         let action = button.label().unwrap();
         self.text_command.set_buffer(Some(&buffer));
@@ -190,12 +177,13 @@ impl Window {
             _ => return,
         };
         self.goto_command();
-        let providers = self.providers.borrow();
         let handle = match action.as_str() {
-            "Install" => {
-                providers.install(&provider_name, &item.qualifiedName(), &buffer, &password)
-            }
-            "Remove" => providers.remove(&provider_name, &item.qualifiedName(), &buffer, &password),
+            "Install" => self
+                .provider()
+                .install(&password, &item.qualifiedName(), &buffer),
+            "Remove" => self
+                .provider()
+                .remove(&password, &item.qualifiedName(), &buffer),
             _ => return,
         };
         self.command_finished(handle);
@@ -206,9 +194,10 @@ impl Window {
             Some(value) => value,
             None => return,
         };
-        let combobox_text = combobox_text.as_str();
-        let providers = self.providers.borrow_mut();
-        let provider = match providers.model(combobox_text) {
+
+        self.update_model(&combobox_text);
+
+        let provider = match self.provider().model() {
             Ok(value) => value,
             Err(value) => {
                 messagebox::error("Error while changing provider", &value, self.window());
@@ -283,9 +272,8 @@ impl Window {
             Some(value) => value,
             _ => return,
         };
-        let str_prd = self.combobox_text();
         self.goto_command();
-        let handle = self.providers.borrow().update(&str_prd, &buffer, &password);
+        let handle = self.provider().update(&password, &buffer);
         self.command_finished(handle);
     }
     #[template_callback]
@@ -344,18 +332,39 @@ impl Window {
     async fn password(&self) -> Option<SecVec<u8>> {
         let password: Option<SecVec<u8>> = self.password.borrow().clone();
         if password.is_some() {
-            password
-        } else if self
-            .providers
-            .borrow()
-            .is_root_required(&self.combobox_text())
+            return password;
+        }
+        let is_root_required;
         {
+            let provider = self.provider();
+            is_root_required = provider.is_root_required();
+        }
+        if is_root_required {
             let password = messagebox::ask_password(self.window()).await;
             self.password.replace(password.clone());
             password
         } else {
             Some(SecStr::from(""))
         }
+    }
+    fn provider<'a>(&'a self) -> Ref<'a, ProviderKind> {
+        let providers = self.providers.borrow();
+        Ref::map(providers, |providers| {
+            providers
+                .iter()
+                .find(|provider| provider.name().eq(&self.combobox_text()))
+                .unwrap()
+        })
+    }
+    fn update_model(&self, provider_name: &str) {
+        let providers = self.providers.borrow_mut();
+        let mut provider = RefMut::map(providers, |providers| {
+            providers
+                .iter_mut()
+                .find(|provider| provider.name().eq(&provider_name))
+                .unwrap()
+        });
+        let _ = provider.update_packages();
     }
 }
 fn signal_text_bind_handler(item: gtk::ListItem, value: String) {

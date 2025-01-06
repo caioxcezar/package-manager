@@ -4,8 +4,11 @@ use regex::Regex;
 use secstr::SecVec;
 use std::thread::JoinHandle;
 
-use crate::backend::{command, package_object::PackageData, provider::Provider, utils::split_utf8};
-#[derive(Clone)]
+use crate::backend::{
+    command, package_object::PackageData, provider::ProviderActions, utils::split_utf8,
+};
+
+#[derive(Clone, Debug)]
 pub struct Winget {
     name: String,
     packages: Vec<PackageData>,
@@ -14,17 +17,19 @@ pub struct Winget {
     root_required: bool,
 }
 
-pub fn init() -> Winget {
-    Winget {
-        name: String::from("Winget"),
-        packages: Vec::new(),
-        root_required: false,
-        installed: 0,
-        total: 0,
+impl Default for Winget {
+    fn default() -> Self {
+        Winget {
+            name: String::from("Winget"),
+            packages: Vec::new(),
+            root_required: false,
+            installed: 0,
+            total: 0,
+        }
     }
 }
 
-impl Provider for Winget {
+impl ProviderActions for Winget {
     fn installed(&self) -> usize {
         self.installed
     }
@@ -131,8 +136,8 @@ impl Provider for Winget {
     fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
         command::run_stream("winget upgrade -h --all".to_owned(), text_buffer)
     }
-}
-pub fn is_available() -> bool {
-    let packages = command::run("winget --version");
-    packages.is_ok()
+    fn is_available(&self) -> bool {
+        let packages = command::run("winget --version");
+        packages.is_ok()
+    }
 }

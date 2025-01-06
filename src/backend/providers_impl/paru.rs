@@ -4,8 +4,8 @@ use gtk::TextBuffer;
 use rayon::prelude::*;
 use secstr::SecVec;
 
-use crate::backend::{command, package_object::PackageData, provider::Provider};
-#[derive(Clone)]
+use crate::backend::{command, package_object::PackageData, provider::ProviderActions};
+#[derive(Clone, Debug)]
 pub struct Paru {
     pub name: String,
     pub packages: Vec<PackageData>,
@@ -14,17 +14,19 @@ pub struct Paru {
     pub root_required: bool,
 }
 
-pub fn init() -> Paru {
-    Paru {
-        name: String::from("Paru"),
-        packages: Vec::new(),
-        root_required: true,
-        installed: 0,
-        total: 0,
+impl Default for Paru {
+    fn default() -> Self {
+        Paru {
+            name: String::from("Paru"),
+            packages: Vec::new(),
+            root_required: true,
+            installed: 0,
+            total: 0,
+        }
     }
 }
 
-impl Provider for Paru {
+impl ProviderActions for Paru {
     fn installed(&self) -> usize {
         self.installed
     }
@@ -104,8 +106,8 @@ impl Provider for Paru {
         let command = format!("echo '{}' | sudo -S su && paru -Syu --noconfirm", password);
         command::run_stream(command, text_buffer)
     }
-}
-pub fn is_available() -> bool {
-    let packages = command::run("paru --version");
-    packages.is_ok()
+    fn is_available(&self) -> bool {
+        let packages = command::run("paru --version");
+        packages.is_ok()
+    }
 }

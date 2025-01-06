@@ -8,7 +8,13 @@ glib::wrapper! {
 }
 
 impl PackageObject {
-    pub fn new(installed: bool, repository: String, name: String, version: String, qualified_name: String) -> Self {
+    pub fn new(
+        installed: bool,
+        repository: String,
+        name: String,
+        version: String,
+        qualified_name: String,
+    ) -> Self {
         Object::builder()
             .property("installed", installed)
             .property("repository", repository)
@@ -18,7 +24,7 @@ impl PackageObject {
             .build()
     }
 }
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct PackageData {
     pub installed: bool,
     pub repository: String,
