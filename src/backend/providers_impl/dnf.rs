@@ -5,8 +5,8 @@ use rayon::prelude::*;
 use regex::Regex;
 use secstr::SecVec;
 
-use crate::backend::{command, package_object::PackageData, provider::Provider};
-#[derive(Clone)]
+use crate::backend::{command, package_object::PackageData, provider::ProviderActions};
+#[derive(Clone, Debug)]
 pub struct Dnf {
     name: String,
     packages: Vec<PackageData>,
@@ -15,17 +15,19 @@ pub struct Dnf {
     root_required: bool,
 }
 
-pub fn init() -> Dnf {
-    Dnf {
-        name: String::from("Dnf"),
-        packages: Vec::new(),
-        root_required: true,
-        installed: 0,
-        total: 0,
+impl Default for Dnf {
+    fn default() -> Self {
+        Dnf {
+            name: String::from("Dnf"),
+            packages: Vec::new(),
+            root_required: true,
+            installed: 0,
+            total: 0,
+        }
     }
 }
 
-impl Provider for Dnf {
+impl ProviderActions for Dnf {
     fn installed(&self) -> usize {
         self.installed
     }
@@ -121,8 +123,8 @@ impl Provider for Dnf {
             text_buffer,
         )
     }
-}
-pub fn is_available() -> bool {
-    let packages = command::run("dnf --version");
-    packages.is_ok()
+    fn is_available(&self) -> bool {
+        let packages = command::run("dnf --version");
+        packages.is_ok()
+    }
 }

@@ -1,4 +1,4 @@
-use crate::backend::{api, command, package_object::PackageData, provider::Provider};
+use crate::backend::{api, command, package_object::PackageData, provider::ProviderActions};
 use gtk::glib;
 use gtk::traits::TextBufferExt;
 use rayon::prelude::*;
@@ -6,6 +6,8 @@ use serde::Deserialize;
 use std::fs;
 use std::path::Path;
 use std::thread;
+
+#[derive(Clone, Debug)]
 pub struct ProtonGE {
     name: String,
     packages: Vec<PackageData>,
@@ -17,7 +19,7 @@ pub struct ProtonGE {
     packages_description: Vec<ApiResponse>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default, Clone)]
 struct ApiResponse {
     tag_name: String,
     body: String,
@@ -31,31 +33,33 @@ struct ApiAssets {
     name: String,
 }
 
-pub fn init() -> ProtonGE {
-    let home = command::run("echo $HOME").unwrap();
-    let home = home.trim();
-    let mut folder_path: &str = "";
-    if Path::new(&format!("{}{}", home, "/.steam")).exists() {
-        folder_path = "/.steam/root/compatibilitytools.d";
-    }
-    if Path::new(&format!("{}{}", home, "/.var/app/com.valvesoftware.Steam")).exists() {
-        folder_path = "/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d";
-    }
-    ProtonGE {
-        name: String::from("Proton GE"),
-        packages: Vec::new(),
-        root_required: false,
-        installed: 0,
-        total: 0,
-        endpoint: String::from(
-            "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases",
-        ),
-        folder_path: folder_path.to_string(),
-        packages_description: Vec::new(),
+impl Default for ProtonGE {
+    fn default() -> Self {
+        let home = command::run("echo $HOME").unwrap();
+        let home = home.trim();
+        let mut folder_path: &str = "";
+        if Path::new(&format!("{}{}", home, "/.steam")).exists() {
+            folder_path = "/.steam/root/compatibilitytools.d";
+        }
+        if Path::new(&format!("{}{}", home, "/.var/app/com.valvesoftware.Steam")).exists() {
+            folder_path = "/.var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d";
+        }
+        ProtonGE {
+            name: String::from("Proton GE"),
+            packages: Vec::new(),
+            root_required: false,
+            installed: 0,
+            total: 0,
+            endpoint: String::from(
+                "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases",
+            ),
+            folder_path: folder_path.to_string(),
+            packages_description: Vec::new(),
+        }
     }
 }
 
-impl Provider for ProtonGE {
+impl ProviderActions for ProtonGE {
     fn load_packages(&mut self) -> Result<(), String> {
         let proton_location = self.proton_location();
         let proton_dir = fs::read_dir(proton_location).unwrap();
@@ -188,6 +192,19 @@ impl Provider for ProtonGE {
     fn total(&self) -> usize {
         self.total
     }
+    fn is_available(&self) -> bool {
+        if cfg!(windows) {
+            return false;
+        }
+        let home = command::run("echo $HOME").unwrap();
+        let home = home.trim();
+        if !Path::new(&format!("{}{}", home, "/.steam")).exists()
+            && !Path::new(&format!("{}{}", home, "/.var/app/com.valvesoftware.Steam")).exists()
+        {
+            return false;
+        }
+        api::get_str("https://api.github.com/zen").is_ok()
+    }
 }
 impl ProtonGE {
     fn api_package_data(&self, tag_name: &str) -> Option<&ApiResponse> {
@@ -226,17 +243,4 @@ impl ProtonGE {
         }
         path
     }
-}
-pub fn is_available() -> bool {
-    if cfg!(windows) {
-        return false;
-    }
-    let home = command::run("echo $HOME").unwrap();
-    let home = home.trim();
-    if !Path::new(&format!("{}{}", home, "/.steam")).exists()
-        && !Path::new(&format!("{}{}", home, "/.var/app/com.valvesoftware.Steam")).exists()
-    {
-        return false;
-    }
-    api::get_str("https://api.github.com/zen").is_ok()
 }
