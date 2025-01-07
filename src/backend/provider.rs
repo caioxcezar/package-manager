@@ -5,7 +5,7 @@ use super::{
     },
 };
 use crate::backend::package_object::PackageObject;
-use gtk::{gio::ListStore, prelude::*, TextBuffer};
+use gtk::{gio::ListStore, TextBuffer};
 use secstr::SecVec;
 use std::thread::JoinHandle;
 use strum::IntoEnumIterator;
@@ -79,7 +79,7 @@ impl ProviderKind {
         self.as_mut_provider_actions().load_packages()
     }
     pub fn model(&self) -> Result<ListStore, String> {
-        let list_store = ListStore::new(PackageObject::static_type());
+        let list_store = ListStore::new::<PackageObject>();
 
         for value in self.as_provider_actions().packages() {
             list_store.append(&PackageObject::new(

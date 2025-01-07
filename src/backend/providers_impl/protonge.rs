@@ -1,6 +1,6 @@
 use crate::backend::{api, command, package_object::PackageData, provider::ProviderActions};
 use gtk::glib;
-use gtk::traits::TextBufferExt;
+use gtk::prelude::TextBufferExt;
 use rayon::prelude::*;
 use serde::Deserialize;
 use std::fs;
@@ -138,8 +138,8 @@ impl ProviderActions for ProtonGE {
         let pkg = self.package(package).unwrap().clone();
         let txt_buffer = text_buffer.clone();
         let proton_location = self.proton_location();
-        let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let tr = thread::spawn(move || {
+        let (sender, receiver) = async_channel::unbounded();
+        let join_handle = thread::spawn(move || {
             let proton_dir = fs::read_dir(&proton_location).unwrap();
             for dir in proton_dir {
                 let entry = dir.unwrap();
@@ -150,11 +150,11 @@ impl ProviderActions for ProtonGE {
                         let result = fs::remove_dir_all(format!("{}/{}", &proton_location, &name));
                         match result {
                             Ok(_) => {
-                                let _ = tx.send("Removido com sucesso. ".to_owned());
+                                let _ = sender.send_blocking("Removido com sucesso. ".to_owned());
                                 return true;
                             }
                             Err(value) => {
-                                let _ = tx.send(value.to_string());
+                                let _ = sender.send_blocking(value.to_string());
                                 return false;
                             }
                         }
@@ -164,13 +164,14 @@ impl ProviderActions for ProtonGE {
             false
         });
 
-        rx.attach(None, move |text| {
-            let mut text_iter = txt_buffer.end_iter();
-            txt_buffer.insert(&mut text_iter, &text);
-            glib::Continue(true)
+        glib::MainContext::default().spawn_local(async move {
+            while let Ok(text) = receiver.recv().await {
+                let mut text_iter = txt_buffer.end_iter();
+                txt_buffer.insert(&mut text_iter, &text);
+            }
         });
 
-        tr
+        join_handle
     }
     fn update(
         &self,

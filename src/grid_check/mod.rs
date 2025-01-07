@@ -1,7 +1,7 @@
 mod imp;
 use gtk::glib;
+use gtk::prelude::{CheckButtonExt, WidgetExt};
 use gtk::subclass::prelude::*;
-use gtk::traits::{CheckButtonExt, WidgetExt};
 
 glib::wrapper! {
     pub struct GridCheck(ObjectSubclass<imp::GridCheck>)

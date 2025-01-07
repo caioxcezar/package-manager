@@ -1,34 +1,20 @@
-use gtk::{prelude::*, Dialog, ResponseType};
+use gtk::{prelude::*, AlertDialog};
 use secstr::{SecStr, SecVec};
 
 use crate::backend::command;
 
-pub fn error(title: &str, body: &str, window: Option<gtk::Window>) {
-    let mut dialog = gtk::MessageDialog::builder()
-        .text(title)
-        .message_type(gtk::MessageType::Error)
-        .secondary_text(body)
+pub fn alert(title: &str, body: &str, window: &gtk::Window) {
+    let dialog = AlertDialog::builder()
+        .message(title)
+        .detail(body)
         .modal(true)
-        .buttons(gtk::ButtonsType::Ok);
-    if let Some(window) = window {
-        dialog = dialog.transient_for(&window);
-    }
-    let dialog = dialog.build();
-    dialog.run_async(|obj, _| {
-        obj.close();
-    });
+        .build();
+    dialog.show(Some(window));
 }
 
-pub async fn ask_password(window: Option<gtk::Window>) -> Option<SecVec<u8>> {
-    if cfg!(windows) {
-        return Some(SecStr::from("windows"));
-    }
-    let window_clone = window.clone();
-    let mut dialog = Dialog::builder().modal(true);
-    if let Some(window) = window {
-        dialog = dialog.transient_for(&window);
-    }
-    let dialog = dialog.build();
+pub async fn ask_password(window: &gtk::Window) -> Option<SecVec<u8>> {
+    let (sender, receiver) = async_channel::unbounded();
+
     let child = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(5)
@@ -37,43 +23,60 @@ pub async fn ask_password(window: Option<gtk::Window>) -> Option<SecVec<u8>> {
         .margin_start(10)
         .margin_start(10)
         .build();
+
     let text = gtk::Label::builder().label("Password").build();
     let password = gtk::Entry::builder().text("").visibility(false).build();
     let button = gtk::Button::builder().label("Ok").build();
     child.append(&text);
     child.append(&password);
     child.append(&button);
-    dialog.set_child(Some(&child));
 
-    let dialog_button = dialog.clone();
-    let dialog_password = dialog.clone();
+    let dialog = gtk::Window::builder()
+        .transient_for(window)
+        .child(&child)
+        .modal(true)
+        .build();
 
+    let btn_sender = sender.clone();
     button.connect_clicked(move |_| {
-        dialog_button.response(ResponseType::Ok);
+        let _ = btn_sender.send_blocking(true);
     });
 
+    let pass_sender = sender.clone();
     password.connect_activate(move |_| {
-        dialog_password.response(ResponseType::Ok);
+        let _ = pass_sender.send_blocking(true);
     });
 
-    let response = dialog.run_future().await;
-    if response == ResponseType::Ok {
-        let pass = password.text().to_string();
-        let check_password = command::run(&format!("echo '{}' | sudo -S su", &pass));
-        dialog.close();
-        let res = match check_password {
-            Ok(_) => Some(SecStr::from(pass)),
-            _ => {
-                error(
-                    "Wrong Password",
-                    "Please provide the currect password",
-                    window_clone,
-                );
-                return None;
-            }
-        };
-        let _ = command::run("sudo -k");
-        return res;
-    }
-    None
+    dialog.connect_close_request(move |_| {
+        let _ = sender.send_blocking(false);
+        gtk::glib::Propagation::Proceed
+    });
+
+    dialog.set_visible(true);
+
+    let response = receiver.recv().await;
+    let _ = match response {
+        Ok(value) => value,
+        Err(err) => {
+            println!("{:?}", err);
+            return None;
+        }
+    };
+
+    let pass = password.text().to_string();
+    let check_password = command::run(&format!("echo '{}' | sudo -S su", &pass));
+    dialog.close();
+    let res = match check_password {
+        Ok(_) => SecStr::from(pass),
+        _ => {
+            alert(
+                "Wrong Password",
+                "Please provide the currect password",
+                &window,
+            );
+            return None;
+        }
+    };
+    let _ = command::run("sudo -k");
+    Some(res)
 }

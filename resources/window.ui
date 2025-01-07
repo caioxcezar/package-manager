@@ -16,9 +16,7 @@
           </object>
         </property>
         <child type="start">
-          <object class="GtkComboBoxText" id="combobox_provider">
-            <signal name="changed" handler="handle_combobox_changed" swapped="true" />
-          </object>
+          <object class="GtkDropDown" id="dropdown_provider"/>
         </child>
         <child type="end">
           <object class="GtkMenuButton">
@@ -30,7 +28,6 @@
           <object class="GtkButton" id="update">
             <property name="icon-name">view-refresh-symbolic</property>
             <property name="sensitive">true</property>
-            <signal name="clicked" handler="handle_update" swapped="true" />
           </object>
         </child>
       </object>
@@ -64,8 +61,6 @@
                             <property name="model">
                               <object class="GtkSingleSelection" id="single_selection">
                                 <property name="autoselect">false</property>
-                                <signal name="selection-changed" handler="selection_changed"
-                                  swapped="true" />
                               </object>
                             </property>
                             <child>
@@ -152,7 +147,6 @@
                         <property name="halign">1</property>
                         <property name="sensitive">false</property>
                         <property name="label" translatable="yes">Execute Actions</property>
-                        <signal name="clicked" handler="handle_action" swapped="true" />
                       </object>
                     </child>
                     <child>
@@ -160,7 +154,6 @@
                         <property name="hexpand">true</property>
                         <property name="halign">2</property>
                         <property name="label" translatable="yes">Update All</property>
-                        <signal name="clicked" handler="handle_update_all" swapped="true" />
                       </object>
                     </child>
                   </object>
@@ -176,14 +169,27 @@
               <object class="GtkBox">
                 <property name="orientation">1</property>
                 <child>
-                  <object class="GtkInfoBar" id="info_bar">
+                  <object class="GtkOverlay" id="info_bar">
                     <property name="visible">false</property>
+                    <property name="halign">3</property>
+                    <property name="valign">0</property>
                     <property name="can_focus">false</property>
-                    <property name="show_close_button">true</property>
                     <child>
-                      <object class="GtkLabel" id="info_bar_label" />
+                      <object class="GtkBox">
+                        <property name="orientation">0</property>
+                        <child>
+                          <object class="GtkLabel" id="info_bar_label" />
+                        </child>
+                        <child>
+                          <object class="GtkButton" id="info_bar_button">
+                            <property name="label" translatable="yes">close</property>
+                          </object>
+                        </child>
+                      </object>
                     </child>
-                    <signal name="response" handler="handle_info_bar_response" swapped="true" />
+                    <style>
+                      <class name="overlay"/>
+                    </style>
                   </object>
                 </child>
                 <child>
