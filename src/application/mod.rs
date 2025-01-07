@@ -21,21 +21,28 @@ impl PackageManagerApplication {
 
     fn setup_gactions(&self) {
         let quit_action = gio::SimpleAction::new("quit", None);
-        quit_action.connect_activate(clone!(@weak self as app => move |_, _| {
-            app.quit();
-        }));
+        quit_action.connect_activate(clone!(
+            #[weak(rename_to = app)]
+            self,
+            move |_, _| {
+                app.quit();
+            }
+        ));
         self.add_action(&quit_action);
 
         let about_action = gio::SimpleAction::new("about", None);
-        about_action.connect_activate(clone!(@weak self as app => move |_, _| {
-            app.show_about();
-        }));
+        about_action.connect_activate(clone!(
+            #[weak(rename_to = app)]
+            self,
+            move |_, _| {
+                app.show_about();
+            }
+        ));
         self.add_action(&about_action);
     }
 
     fn show_about(&self) {
-        let img = gtk::Image::new();
-        img.set_from_resource(Some("/org/caioxcezar/packagemanager/package_manager.svg"));
+        let img = gtk::Image::from_resource("/org/caioxcezar/packagemanager/package_manager.svg");
         let paintable = img.paintable().unwrap();
         let window = self.active_window().unwrap();
         let dialog = gtk::AboutDialog::builder()

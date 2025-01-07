@@ -1,6 +1,5 @@
 use flate2::bufread::GzDecoder;
-use gtk::glib;
-use gtk::traits::TextBufferExt;
+use gtk::{glib, prelude::TextBufferExt};
 use serde::de::DeserializeOwned;
 use std::{
     io::BufReader,
@@ -63,33 +62,35 @@ pub fn download_and_extract(
     file_path: String,
     text_buffer: &gtk::TextBuffer,
 ) -> JoinHandle<bool> {
-    let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+    let (sender, receiver) = async_channel::unbounded();
     let txt_buffer = text_buffer.clone();
 
-    let tr = thread::spawn(move || {
-        let _ = tx.send("Starting request...\n".to_owned());
+    let join_handle = thread::spawn(move || {
+        let _ = sender.send_blocking("Starting request...\n".to_owned());
         let response = reqwest::blocking::get(url);
         let response = match response {
             Ok(value) => value,
             Err(value) => {
-                let _ = tx.send(value.to_string());
+                let _ = sender.send_blocking(value.to_string());
                 return false;
             }
         };
-        let _ = tx.send("Start downloading...\n".to_owned());
+        let _ = sender.send_blocking("Start downloading...\n".to_owned());
         let content_br = BufReader::new(response);
         let tarfile = GzDecoder::new(content_br);
         let mut archive = Archive::new(tarfile);
-        let _ = tx.send("Downloading and unpacking...\n".to_owned());
+        let _ = sender.send_blocking("Downloading and unpacking...\n".to_owned());
         archive.unpack(file_path).unwrap();
-        let _ = tx.send("Finished. \n".to_owned());
+        let _ = sender.send_blocking("Finished. \n".to_owned());
         true
     });
 
-    rx.attach(None, move |text: String| {
-        let mut text_iter = txt_buffer.end_iter();
-        txt_buffer.insert(&mut text_iter, &text);
-        glib::Continue(true)
+    glib::MainContext::default().spawn_local(async move {
+        while let Ok(text) = receiver.recv().await {
+            let mut text_iter = txt_buffer.end_iter();
+            txt_buffer.insert(&mut text_iter, &text);
+        }
     });
-    tr
+
+    join_handle
 }

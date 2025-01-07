@@ -1,5 +1,5 @@
 use gtk::glib;
-use gtk::traits::TextBufferExt;
+use gtk::prelude::TextBufferExt;
 use std::io::{BufRead, BufReader, Error, ErrorKind};
 use std::process::{Command, Stdio};
 use std::thread::{self, JoinHandle};
@@ -24,9 +24,9 @@ pub fn run(command: &str) -> Result<String, Error> {
 
 pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) -> JoinHandle<bool> {
     let program = if cfg!(windows) { "powershell" } else { "sh" };
-    let (tx, rx) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+    let (sender, receiver) = async_channel::unbounded();
     let txt_buffer = text_buffer.clone();
-    let tr = thread::spawn(move || {
+    let join_handle = thread::spawn(move || {
         let mut cmd = Command::new(program)
             .arg("-c")
             .arg(command)
@@ -37,7 +37,7 @@ pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) -> JoinHandle<
         let stdout_reader = BufReader::new(stdout);
         let stdout_lines = stdout_reader.lines();
         for line in stdout_lines {
-            let _ = tx.send(format!("{}\n", line.unwrap()));
+            let _ = sender.send_blocking(format!("{}\n", line.unwrap()));
         }
         match cmd.wait() {
             Ok(value) => value.success(),
@@ -45,10 +45,12 @@ pub fn run_stream(command: String, text_buffer: &gtk::TextBuffer) -> JoinHandle<
         }
     });
 
-    rx.attach(None, move |text| {
-        let mut text_iter = txt_buffer.end_iter();
-        txt_buffer.insert(&mut text_iter, &text);
-        glib::Continue(true)
+    glib::MainContext::default().spawn_local(async move {
+        while let Ok(text) = receiver.recv().await {
+            let mut text_iter = txt_buffer.end_iter();
+            txt_buffer.insert(&mut text_iter, &text);
+        }
     });
-    tr
+
+    join_handle
 }
