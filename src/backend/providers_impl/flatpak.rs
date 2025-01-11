@@ -50,43 +50,37 @@ impl ProviderActions for Flatpak {
         let packages = command::run("flatpak list")?;
         let installed_packages = packages
             .split('\n')
-            .filter(|e| {
-                let x = e.split('\t').collect::<Vec<&str>>();
-                x.len().gt(&1)
+            .filter_map(|e| {
+                let columns = e.split('\t').collect::<Vec<&str>>();
+                if columns.len().gt(&1) {
+                    Some(format!("{} {}", columns[4], columns[1]))
+                } else {
+                    None
+                }
             })
-            .collect::<Vec<&str>>();
+            .collect::<Vec<String>>();
 
-        let remotes = command::run("flatpak remotes")?;
-        let remotes = remotes.split('\n').collect::<Vec<&str>>();
-
-        for str_remote in remotes {
-            let arr_remote: Vec<&str> = str_remote.split('\t').collect();
-            if arr_remote[0] == "Name" || arr_remote[0].trim() == "" {
-                continue;
-            }
-            let packages = command::run(&format!("{} {}", "flatpak remote-ls", arr_remote[0]))?;
-            let packages = packages.split('\n').collect::<Vec<&str>>();
-            self.packages.append(
-                &mut packages
-                    .par_iter()
-                    .filter_map(|str_package| {
-                        let arr_package = str_package.split('\t').collect::<Vec<&str>>();
-                        if arr_package.len() < 2 {
-                            return None;
-                        }
-                        Some(PackageData {
-                            repository: String::from(arr_remote[0]),
-                            name: String::from(arr_package[0]),
-                            qualified_name: String::from(arr_package[1]),
-                            version: String::from(arr_package[2]),
-                            installed: installed_packages
-                                .par_iter()
-                                .any(|f| f.contains(arr_package[1])),
-                        })
+        let packages = command::run("flatpak remote-ls")?;
+        let packages = packages.split('\n').collect::<Vec<&str>>();
+        self.packages.append(
+            &mut packages
+                .par_iter()
+                .filter_map(|str_package| {
+                    let arr_package = str_package.split('\t').collect::<Vec<&str>>();
+                    if arr_package.len() < 6 {
+                        return None;
+                    }
+                    let qualified_name = format!("{} {}", arr_package[5], arr_package[1]);
+                    Some(PackageData {
+                        repository: String::from(arr_package[5]),
+                        name: String::from(arr_package[0]),
+                        qualified_name: qualified_name.clone(),
+                        version: String::from(arr_package[2]),
+                        installed: installed_packages.par_iter().any(|f| f.eq(&qualified_name)),
                     })
-                    .collect::<Vec<PackageData>>(),
-            );
-        }
+                })
+                .collect::<Vec<PackageData>>(),
+        );
         self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
         self.total = self.packages.len();
         Ok(())
@@ -96,13 +90,19 @@ impl ProviderActions for Flatpak {
         Ok(response.replace('\t', "\n"))
     }
     fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("flatpak install {} -y", package), None)
+        CommandStream::new(
+            format!("flatpak install {} -y --noninteractive", package),
+            None,
+        )
     }
     fn remove(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("flatpak remove {} -y", package), None)
+        CommandStream::new(
+            format!("flatpak remove {} -y --noninteractive", package),
+            None,
+        )
     }
     fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
-        CommandStream::new("flatpak update -y".to_owned(), None)
+        CommandStream::new("flatpak update -y --noninteractive".to_owned(), None)
     }
     fn is_available(&self) -> bool {
         let packages = command::run("flatpak --version");
