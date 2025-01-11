@@ -1,22 +1,23 @@
+use std::any::Any;
+
 use super::{
+    command::CommandStream,
     package_object::PackageData,
-    providers_impl::{
-        dnf::Dnf, flatpak::Flatpak, pacman::Pacman, paru::Paru, protonge::ProtonGE, winget::Winget,
-    },
+    providers_impl::{dnf::Dnf, flatpak::Flatpak, pacman::Pacman, paru::Paru, winget::Winget},
 };
 use crate::backend::package_object::PackageObject;
-use gtk::{gio::ListStore, TextBuffer};
+use anyhow::Result;
+use gtk::gio::ListStore;
 use secstr::SecVec;
-use std::thread::JoinHandle;
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
-#[derive(Debug, EnumIter)]
+#[derive(Debug, EnumIter, Clone)]
 pub enum ProviderKind {
     FLATPAK(Flatpak),
     PACMAN(Pacman),
     PARU(Paru),
-    PROTONGE(ProtonGE),
+    // PROTONGE(ProtonGE),
     WINGET(Winget),
     DNF(Dnf),
 }
@@ -27,7 +28,7 @@ impl ProviderKind {
             ProviderKind::FLATPAK(provider) => provider,
             ProviderKind::PACMAN(provider) => provider,
             ProviderKind::PARU(provider) => provider,
-            ProviderKind::PROTONGE(provider) => provider,
+            // ProviderKind::PROTONGE(provider) => provider,
             ProviderKind::WINGET(provider) => provider,
             ProviderKind::DNF(provider) => provider,
         }
@@ -37,7 +38,7 @@ impl ProviderKind {
             ProviderKind::FLATPAK(provider) => provider,
             ProviderKind::PACMAN(provider) => provider,
             ProviderKind::PARU(provider) => provider,
-            ProviderKind::PROTONGE(provider) => provider,
+            // ProviderKind::PROTONGE(provider) => provider,
             ProviderKind::WINGET(provider) => provider,
             ProviderKind::DNF(provider) => provider,
         }
@@ -51,34 +52,22 @@ impl ProviderKind {
     pub fn is_root_required(&self) -> bool {
         self.as_provider_actions().is_root_required()
     }
-    pub fn package_info(&self, package_name: &str) -> String {
+    pub fn package_info(&self, package_name: String) -> Result<String> {
         self.as_provider_actions().package_info(package_name)
     }
-    pub fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        self.as_provider_actions().update(password, text_buffer)
+    pub fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
+        self.as_provider_actions().update(password)
     }
-    pub fn install(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        self.as_provider_actions()
-            .install(password, package, text_buffer)
+    pub fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        self.as_provider_actions().install(password, package)
     }
-    pub fn remove(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        self.as_provider_actions()
-            .remove(password, package, text_buffer)
+    pub fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        self.as_provider_actions().remove(password, package)
     }
-    pub fn update_packages(&mut self) -> Result<(), String> {
+    pub fn update_packages(&mut self) -> Result<()> {
         self.as_mut_provider_actions().load_packages()
     }
-    pub fn model(&self) -> Result<ListStore, String> {
+    pub fn model(&self) -> Result<ListStore> {
         let list_store = ListStore::new::<PackageObject>();
 
         for value in self.as_provider_actions().packages() {
@@ -100,25 +89,15 @@ impl ProviderKind {
 }
 
 pub trait ProviderActions {
-    fn load_packages(&mut self) -> Result<(), String>;
+    fn load_packages(&mut self) -> Result<()>;
     fn is_available(&self) -> bool;
     fn name(&self) -> String;
     fn is_root_required(&self) -> bool;
     fn packages(&self) -> Vec<PackageData>;
-    fn package_info(&self, package: &str) -> String;
-    fn install(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool>;
-    fn remove(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool>;
-    fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool>;
+    fn package_info(&self, package: String) -> Result<String>;
+    fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream>;
+    fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream>;
+    fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream>;
     #[allow(dead_code)]
     fn installed(&self) -> usize;
     #[allow(dead_code)]

@@ -1,4 +1,5 @@
 use adw::subclass::prelude::*;
+use anyhow::{Context, Result};
 use glib::clone;
 use gtk::prelude::*;
 use gtk::{gio, glib};
@@ -35,16 +36,22 @@ impl PackageManagerApplication {
             #[weak(rename_to = app)]
             self,
             move |_, _| {
-                app.show_about();
+                if let Err(msg) = app.show_about() {
+                    println!("{}", msg);
+                }
             }
         ));
         self.add_action(&about_action);
     }
 
-    fn show_about(&self) {
+    fn show_about(&self) -> Result<()> {
         let img = gtk::Image::from_resource("/org/caioxcezar/packagemanager/package_manager.svg");
-        let paintable = img.paintable().unwrap();
-        let window = self.active_window().unwrap();
+        let paintable = img
+            .paintable()
+            .context("Failed to load image package_manager.svg")?;
+        let window = self
+            .active_window()
+            .context("Failed to find the active window")?;
         let dialog = gtk::AboutDialog::builder()
             .transient_for(&window)
             .modal(true)
@@ -58,5 +65,7 @@ impl PackageManagerApplication {
             .build();
 
         dialog.present();
+
+        Ok(())
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     backend::{package_object::PackageObject, provider::ProviderKind},
-    grid_check, grid_text,
+    grid_check, grid_text, messagebox,
 };
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
@@ -72,7 +72,9 @@ impl ObjectImpl for Window {
 
         let obj = self.obj();
 
-        obj.setup_splash();
+        if let Err(err) = obj.setup_splash() {
+            messagebox::alert("Error while opening", &format!("{err:?}"), &obj);
+        }
 
         glib::source::idle_add_local_once(clone!(
             #[weak(rename_to = window)]
@@ -98,11 +100,14 @@ impl Window {
     }
     #[template_callback]
     fn signal_installed_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
-        let entry = item.item().and_downcast::<PackageObject>().unwrap();
-        let child = item
-            .child()
-            .and_downcast::<grid_check::GridCheck>()
-            .unwrap();
+        let entry = match item.item().and_downcast::<PackageObject>() {
+            Some(v) => v,
+            None => return,
+        };
+        let child = match item.child().and_downcast::<grid_check::GridCheck>() {
+            Some(v) => v,
+            None => return,
+        };
         let ent = grid_check::Entry {
             check: entry.installed(),
             sensitive: false,
@@ -111,36 +116,39 @@ impl Window {
     }
     #[template_callback]
     fn signal_name_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
-        let entry = item.item().and_downcast::<PackageObject>().unwrap();
+        let entry = match item.item().and_downcast::<PackageObject>() {
+            Some(v) => v,
+            None => return,
+        };
         signal_text_bind_handler(item, entry.name());
     }
     #[template_callback]
     fn signal_version_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
-        let entry = item.item().and_downcast::<PackageObject>().unwrap();
+        let entry = match item.item().and_downcast::<PackageObject>() {
+            Some(v) => v,
+            None => return,
+        };
         signal_text_bind_handler(item, entry.version());
     }
     #[template_callback]
     fn signal_repository_bind_handler(_factory: gtk::SignalListItemFactory, item: gtk::ListItem) {
-        let entry = item.item().and_downcast::<PackageObject>().unwrap();
+        let entry = match item.item().and_downcast::<PackageObject>() {
+            Some(v) => v,
+            None => return,
+        };
         signal_text_bind_handler(item, entry.repository());
-    }
-    #[template_callback]
-    fn handle_search(&self, search: &gtk::SearchEntry) {
-        self.single_selection.unselect_all();
-        let value = search.text().to_ascii_lowercase();
-        let filter = gtk::CustomFilter::new(move |obj| {
-            let obj = obj.downcast_ref::<PackageObject>().unwrap();
-            obj.qualifiedName().to_ascii_lowercase().contains(&value)
-        });
-        self.filter_list.set_filter(Some(&filter));
     }
     #[template_callback]
     fn handle_focused(&self) {
         self.dropdown_provider.set_selected(0);
     }
 }
+
 fn signal_text_bind_handler(item: gtk::ListItem, value: String) {
-    let child = item.child().and_downcast::<grid_text::GridText>().unwrap();
+    let child = match item.child().and_downcast::<grid_text::GridText>() {
+        Some(v) => v,
+        None => return,
+    };
     let ent = grid_text::Entry { name: value };
     child.set_entry(&ent);
 }

@@ -1,18 +1,18 @@
 use gtk::{prelude::*, AlertDialog};
 use secstr::{SecStr, SecVec};
 
-use crate::backend::command;
+use crate::{backend::command, window::Window};
 
-pub fn alert(title: &str, body: &str, window: &gtk::Window) {
-    let dialog = AlertDialog::builder()
+pub fn alert(title: &str, body: &str, window: &Window) {
+    AlertDialog::builder()
         .message(title)
         .detail(body)
         .modal(true)
-        .build();
-    dialog.show(Some(window));
+        .build()
+        .show(Some(window));
 }
 
-pub async fn ask_password(window: &gtk::Window) -> Option<SecVec<u8>> {
+pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {
     let (sender, receiver) = async_channel::unbounded();
 
     let child = gtk::Box::builder()
@@ -68,10 +68,10 @@ pub async fn ask_password(window: &gtk::Window) -> Option<SecVec<u8>> {
     dialog.close();
     let res = match check_password {
         Ok(_) => SecStr::from(pass),
-        _ => {
+        Err(err) => {
             alert(
                 "Wrong Password",
-                "Please provide the currect password",
+                &format!("Please provide the currect password\n.{:?}", err),
                 &window,
             );
             return None;

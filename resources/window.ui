@@ -12,7 +12,6 @@
             <property name="hexpand">true</property>
             <property name="search-delay">500</property>
             <property name="placeholder-text" translatable="yes">Search Value</property>
-            <signal name="search-changed" handler="handle_search" swapped="true" />
           </object>
         </property>
         <child type="start">

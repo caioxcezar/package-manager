@@ -1,11 +1,13 @@
-use std::thread::JoinHandle;
-
-use gtk::TextBuffer;
+use anyhow::Result;
 use rayon::prelude::*;
 use regex::Regex;
 use secstr::SecVec;
 
-use crate::backend::{command, package_object::PackageData, provider::ProviderActions};
+use crate::backend::{
+    command::{self, CommandStream},
+    package_object::PackageData,
+    provider::ProviderActions,
+};
 #[derive(Clone, Debug)]
 pub struct Dnf {
     name: String,
@@ -43,14 +45,10 @@ impl ProviderActions for Dnf {
     fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
-    fn load_packages(&mut self) -> Result<(), String> {
+    fn load_packages(&mut self) -> Result<(), anyhow::Error> {
         self.packages.clear();
 
-        let packages = command::run("dnf list --all -q");
-        let packages = match packages {
-            Ok(result) => result,
-            Err(err) => return Err(format!("{:?}", err)),
-        };
+        let packages = command::run("dnf list --all -q")?;
 
         let grp_packages = packages
             .split("Available Packages\n")
@@ -89,39 +87,17 @@ impl ProviderActions for Dnf {
         self.total = self.packages.len();
         Ok(())
     }
-    fn package_info(&self, package: &str) -> String {
-        command::run(&format!("dnf info {}", package)).unwrap()
+    fn package_info(&self, package: String) -> Result<String> {
+        command::run(&format!("dnf info {}", package))
     }
-    fn install(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        let pass = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        command::run_stream(
-            format!("echo '{}' | sudo -S dnf install {} -y", pass, package),
-            text_buffer,
-        )
+    fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("sudo -S dnf install {} -y", package), password)
     }
-    fn remove(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        let pass = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        command::run_stream(
-            format!("echo '{}' | sudo -S dnf remove {} -y", pass, package),
-            text_buffer,
-        )
+    fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("sudo -S dnf remove {} -y", package), password)
     }
-    fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        let pass = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        command::run_stream(
-            format!("echo '{}' | sudo -S dnf update -y", pass),
-            text_buffer,
-        )
+    fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
+        CommandStream::new(format!("sudo -S dnf update -y"), password)
     }
     fn is_available(&self) -> bool {
         let packages = command::run("dnf --version");

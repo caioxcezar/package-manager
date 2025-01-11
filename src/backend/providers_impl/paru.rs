@@ -1,10 +1,12 @@
-use std::thread::JoinHandle;
-
-use gtk::TextBuffer;
+use anyhow::Result;
 use rayon::prelude::*;
 use secstr::SecVec;
 
-use crate::backend::{command, package_object::PackageData, provider::ProviderActions};
+use crate::backend::{
+    command::{self, CommandStream},
+    package_object::PackageData,
+    provider::ProviderActions,
+};
 #[derive(Clone, Debug)]
 pub struct Paru {
     pub name: String,
@@ -42,13 +44,9 @@ impl ProviderActions for Paru {
     fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
-    fn load_packages(&mut self) -> Result<(), String> {
+    fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
-        let packages = command::run("paru -Sl");
-        let packages = match packages {
-            Ok(result) => result,
-            Err(err) => return Err(format!("{:?}", err)),
-        };
+        let packages = command::run("paru -Sl")?;
         let packages: Vec<&str> = packages.split('\n').collect();
 
         self.packages = packages
@@ -72,39 +70,20 @@ impl ProviderActions for Paru {
         self.total = self.packages.len();
         Ok(())
     }
-    fn package_info(&self, package: &str) -> String {
-        command::run(&format!("paru -Si {}", package)).unwrap()
+    fn package_info(&self, package: String) -> Result<String> {
+        command::run(&format!("paru -Si {}", package))
     }
-    fn install(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        let command = format!(
-            "echo '{}' | sudo -S su && paru -Syu {} --noconfirm",
-            password, package
-        );
-        command::run_stream(command, text_buffer)
+    fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("paru -Syu {} --noconfirm", package), password)
     }
-    fn remove(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        let command = format!(
-            "echo '{}' | sudo -S su && paru -Rsu {} --noconfirm",
-            password, package
-        );
-        command::run_stream(command, text_buffer)
+    fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(
+            format!("sudo -S su && paru -Runs {} --noconfirm", package),
+            password,
+        )
     }
-    fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        let command = format!("echo '{}' | sudo -S su && paru -Syu --noconfirm", password);
-        command::run_stream(command, text_buffer)
+    fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
+        CommandStream::new("paru -Syu --noconfirm".to_string(), password)
     }
     fn is_available(&self) -> bool {
         let packages = command::run("paru --version");

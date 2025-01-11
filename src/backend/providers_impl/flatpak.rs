@@ -1,10 +1,12 @@
-use std::thread::JoinHandle;
-
-use gtk::TextBuffer;
+use anyhow::Result;
 use rayon::prelude::*;
 use secstr::SecVec;
 
-use crate::backend::{command, package_object::PackageData, provider::ProviderActions};
+use crate::backend::{
+    command::{self, CommandStream},
+    package_object::PackageData,
+    provider::ProviderActions,
+};
 #[derive(Clone, Debug)]
 pub struct Flatpak {
     name: String,
@@ -42,45 +44,33 @@ impl ProviderActions for Flatpak {
     fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
-    fn load_packages(&mut self) -> Result<(), String> {
+    fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
 
-        let packages = command::run("flatpak list");
-        let packages = match packages {
-            Ok(result) => result,
-            Err(err) => return Err(format!("{:?}", err)),
-        };
-        let installed_packages: Vec<&str> = packages
+        let packages = command::run("flatpak list")?;
+        let installed_packages = packages
             .split('\n')
             .filter(|e| {
-                let x: Vec<&str> = e.split('\t').collect();
+                let x = e.split('\t').collect::<Vec<&str>>();
                 x.len().gt(&1)
             })
-            .collect();
+            .collect::<Vec<&str>>();
 
-        let remotes = command::run("flatpak remotes");
-        let remotes = match remotes {
-            Ok(result) => result,
-            Err(err) => return Err(format!("{:?}", err)),
-        };
-        let remotes: Vec<&str> = remotes.split('\n').collect();
+        let remotes = command::run("flatpak remotes")?;
+        let remotes = remotes.split('\n').collect::<Vec<&str>>();
 
         for str_remote in remotes {
             let arr_remote: Vec<&str> = str_remote.split('\t').collect();
             if arr_remote[0] == "Name" || arr_remote[0].trim() == "" {
                 continue;
             }
-            let packages = command::run(&format!("{} {}", "flatpak remote-ls", arr_remote[0]));
-            let packages = match packages {
-                Ok(result) => result,
-                Err(err) => return Err(format!("{:?}", err)),
-            };
-            let packages: Vec<&str> = packages.split('\n').collect();
+            let packages = command::run(&format!("{} {}", "flatpak remote-ls", arr_remote[0]))?;
+            let packages = packages.split('\n').collect::<Vec<&str>>();
             self.packages.append(
                 &mut packages
                     .par_iter()
                     .filter_map(|str_package| {
-                        let arr_package: Vec<&str> = str_package.split('\t').collect();
+                        let arr_package = str_package.split('\t').collect::<Vec<&str>>();
                         if arr_package.len() < 2 {
                             return None;
                         }
@@ -101,18 +91,18 @@ impl ProviderActions for Flatpak {
         self.total = self.packages.len();
         Ok(())
     }
-    fn package_info(&self, package: &str) -> String {
-        let response = command::run(&format!("flatpak search {}", package)).unwrap();
-        response.replace('\t', "\n")
+    fn package_info(&self, package: String) -> Result<String> {
+        let response = command::run(&format!("flatpak search {}", package))?;
+        Ok(response.replace('\t', "\n"))
     }
-    fn install(&self, _: &SecVec<u8>, package: &str, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        command::run_stream(format!("flatpak install {} -y", package), text_buffer)
+    fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("flatpak install {} -y", package), None)
     }
-    fn remove(&self, _: &SecVec<u8>, package: &str, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        command::run_stream(format!("flatpak remove {} -y", package), text_buffer)
+    fn remove(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("flatpak remove {} -y", package), None)
     }
-    fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        command::run_stream("flatpak update -y".to_owned(), text_buffer)
+    fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
+        CommandStream::new("flatpak update -y".to_owned(), None)
     }
     fn is_available(&self) -> bool {
         let packages = command::run("flatpak --version");
