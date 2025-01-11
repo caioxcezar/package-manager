@@ -1,10 +1,12 @@
-use std::thread::JoinHandle;
-
-use gtk::TextBuffer;
+use anyhow::Result;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use secstr::SecVec;
 
-use crate::backend::{command, package_object::PackageData, provider::ProviderActions};
+use crate::backend::{
+    command::{self, CommandStream},
+    package_object::PackageData,
+    provider::ProviderActions,
+};
 #[derive(Clone, Debug)]
 pub struct Pacman {
     name: String,
@@ -42,13 +44,9 @@ impl ProviderActions for Pacman {
     fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
-    fn load_packages(&mut self) -> Result<(), String> {
+    fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
-        let packages = command::run("pacman -Sl");
-        let packages = match packages {
-            Ok(result) => result,
-            Err(err) => return Err(format!("{:?}", err)),
-        };
+        let packages = command::run("pacman -Sl")?;
         let packages: Vec<&str> = packages.split('\n').collect();
         self.packages = packages
             .par_iter()
@@ -71,42 +69,20 @@ impl ProviderActions for Pacman {
         self.total = self.packages.len();
         Ok(())
     }
-    fn package_info(&self, package: &str) -> String {
-        command::run(&format!("pacman -Si {}", package)).unwrap()
+    fn package_info(&self, package: String) -> Result<String> {
+        command::run(&format!("pacman -Si {}", package))
     }
-    fn install(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        let command = command_build(password, format!("pacman -Syu {} --noconfirm", package));
-        command::run_stream(command, text_buffer)
+    fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("pacman -Syu {} --noconfirm", package), password)
     }
-    fn remove(
-        &self,
-        password: &SecVec<u8>,
-        package: &str,
-        text_buffer: &TextBuffer,
-    ) -> JoinHandle<bool> {
-        let command = command_build(password, format!("pacman -Rsu {} --noconfirm", package));
-        command::run_stream(command, text_buffer)
+    fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("pacman -Runs {} --noconfirm", package), password)
     }
-    fn update(&self, password: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        let command = command_build(password, "pacman -Syu --noconfirm".to_owned());
-        command::run_stream(command, text_buffer)
+    fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
+        CommandStream::new("pacman -Syu --noconfirm".to_string(), password)
     }
     fn is_available(&self) -> bool {
         let packages = command::run("pacman --version");
         packages.is_ok()
     }
-}
-
-fn command_build(password: &SecVec<u8>, command: String) -> String {
-    let mut command = command;
-    if cfg!(unix) {
-        let password = String::from_utf8(password.unsecure().to_owned()).unwrap();
-        command.insert_str(0, &format!("echo '{}' | sudo -S ", password));
-    }
-    command
 }

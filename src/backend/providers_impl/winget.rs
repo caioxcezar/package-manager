@@ -1,11 +1,13 @@
-use gtk::TextBuffer;
+use anyhow::{Context, Result};
 use rayon::prelude::*;
 use regex::Regex;
 use secstr::SecVec;
-use std::thread::JoinHandle;
 
 use crate::backend::{
-    command, package_object::PackageData, provider::ProviderActions, utils::split_utf8,
+    command::{self, CommandStream},
+    package_object::PackageData,
+    provider::ProviderActions,
+    utils::split_utf8,
 };
 
 #[derive(Clone, Debug)]
@@ -45,18 +47,21 @@ impl ProviderActions for Winget {
     fn packages(&self) -> Vec<PackageData> {
         self.packages.clone()
     }
-    fn load_packages(&mut self) -> Result<(), String> {
+    fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
-        let packages = command::run("winget list --verbose");
-        let packages = match packages {
-            Ok(result) => result,
-            Err(err) => return Err(format!("{:?}", err)),
-        };
+        let regex = Regex::new(r"[^\x00-\x7F]").context("Failed to create Regex")?;
+        let packages = command::run("winget list --verbose")?;
 
-        let name = packages.find("Name").unwrap();
-        let id = packages.find("Id").unwrap() - name;
-        let version = packages.find("Version").unwrap() - name;
-        let source = packages.find("Source").unwrap() - name;
+        let name = packages.find("Name").context("Failed to find name index")?;
+        let id = packages.find("Id").context("Failed to find id index")? - name;
+        let version = packages
+            .find("Version")
+            .context("Failed to find version index")?
+            - name;
+        let source = packages
+            .find("Source")
+            .context("Failed to find source index")?
+            - name;
 
         let packages: Vec<&str> = packages.split('\n').collect();
         let installed_packages: Vec<PackageData> = packages
@@ -66,7 +71,7 @@ impl ProviderActions for Winget {
                     return None;
                 }
                 let name = split_utf8(package, 0, id);
-                if Regex::new(r"[^\x00-\x7F]").unwrap().is_match(&name) {
+                if regex.is_match(&name) {
                     return None;
                 }
                 let repository = if package[source..].trim() == "" {
@@ -85,17 +90,13 @@ impl ProviderActions for Winget {
             })
             .collect();
 
-        let packages = command::run("winget search -q `\"`\" --verbose");
-        let packages = match packages {
-            Ok(result) => result,
-            Err(err) => return Err(format!("{:?}", err)),
-        };
+        let packages = command::run("winget search -q `\"`\" --verbose")?;
 
-        let name = packages.find("Name").unwrap();
-        let id = packages.find("Id").unwrap() - name;
-        let version = packages.find("Version").unwrap() - name;
-        let _match = packages.find("Match").unwrap() - name;
-        let source = packages.find("Source").unwrap() - name;
+        let name = packages.find("Name").context("Failed to find name")?;
+        let id = packages.find("Id").context("Failed to find id")? - name;
+        let version = packages.find("Version").context("Failed to find version")? - name;
+        let _match = packages.find("Match").context("Failed to find match")? - name;
+        let source = packages.find("Source").context("Failed to find source")? - name;
 
         let packages: Vec<&str> = packages.split('\n').collect();
         self.packages = packages
@@ -105,7 +106,7 @@ impl ProviderActions for Winget {
                     return None;
                 }
                 let name = split_utf8(package, 0, id);
-                if Regex::new(r"[^\x00-\x7F]").unwrap().is_match(&name) {
+                if regex.is_match(&name) {
                     return None;
                 }
                 Some(PackageData {
@@ -124,17 +125,17 @@ impl ProviderActions for Winget {
         self.total = self.packages.len();
         Ok(())
     }
-    fn package_info(&self, package: &str) -> String {
-        command::run(&format!("winget show {}", package)).unwrap()
+    fn package_info(&self, package: String) -> Result<String> {
+        command::run(&format!("winget show {}", package))
     }
-    fn install(&self, _: &SecVec<u8>, package: &str, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        command::run_stream(format!("winget install {}", package), text_buffer)
+    fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("winget install {}", package), None)
     }
-    fn remove(&self, _: &SecVec<u8>, package: &str, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        command::run_stream(format!("winget uninstall {}", package), text_buffer)
+    fn remove(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        CommandStream::new(format!("winget uninstall {}", package), None)
     }
-    fn update(&self, _: &SecVec<u8>, text_buffer: &TextBuffer) -> JoinHandle<bool> {
-        command::run_stream("winget upgrade -h --all".to_owned(), text_buffer)
+    fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
+        CommandStream::new("winget upgrade -h --all".to_owned(), None)
     }
     fn is_available(&self) -> bool {
         let packages = command::run("winget --version");

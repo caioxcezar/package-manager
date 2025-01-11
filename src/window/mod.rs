@@ -1,22 +1,23 @@
 mod imp;
 
-use std::{
-    cell::Ref,
-    thread::{self, JoinHandle},
-};
+use std::cell::Ref;
+use std::thread::spawn;
 
 use adw::subclass::prelude::*;
+use anyhow::{anyhow, Context, Result};
+use async_channel::unbounded;
 use glib::{clone, Object};
 use gtk::{
     gio, glib,
     prelude::{
-        ButtonExt, Cast, CastNone, ListModelExt, SelectionModelExt, TextBufferExt, TextViewExt,
-        WidgetExt,
+        ButtonExt, Cast, CastNone, EditableExt, ListModelExt, SelectionModelExt, TextBufferExt,
+        TextViewExt, WidgetExt,
     },
     SingleSelection, StringList, TextBuffer,
 };
 use secstr::{SecStr, SecVec};
 
+use crate::backend::command::CommandStream;
 use crate::{
     application,
     backend::{package_object::PackageObject, provider::ProviderKind},
@@ -36,16 +37,20 @@ impl Window {
         Object::builder().property("application", app).build()
     }
 
-    fn setup_splash(&self) {
+    fn setup_splash(&self) -> Result<()> {
         let obj = self.imp();
 
         obj.header_bar.set_visible(false);
 
         let img = gtk::Image::from_resource("/org/caioxcezar/packagemanager/package_manager.svg");
-        let paintable = img.paintable().unwrap();
+        let paintable = img
+            .paintable()
+            .context("Failed to load image package_manager.svg")?;
         obj.splash.set_paintable(Some(&paintable));
 
         obj.filter_list.set_incremental(true);
+
+        Ok(())
     }
 
     fn setup_signals(&self) {
@@ -62,8 +67,14 @@ impl Window {
         obj.dropdown_provider.connect_selected_item_notify(clone!(
             #[weak(rename_to = window)]
             self,
-            move |dropdown| {
-                window.handle_dropdown_changed(dropdown);
+            move |_| {
+                if let Err(err) = window.handle_dropdown_changed() {
+                    messagebox::alert(
+                        "Failed to change the dropdown",
+                        &format!("{err:?}"),
+                        &window,
+                    );
+                };
             }
         ));
 
@@ -71,7 +82,13 @@ impl Window {
             #[weak(rename_to = window)]
             self,
             move |grid, position, _n_items| {
-                window.handle_selection_changed(grid, position);
+                if let Err(err) = window.handle_selection_changed(grid, position) {
+                    messagebox::alert(
+                        "Failed to change the dropdown",
+                        &format!("{err:?}"),
+                        &window,
+                    );
+                };
             }
         ));
 
@@ -79,7 +96,11 @@ impl Window {
             #[weak(rename_to = window)]
             self,
             move |_button| {
-                glib::spawn_future_local(async move { window.handle_action().await });
+                glib::spawn_future_local(async move {
+                    if let Err(err) = window.handle_action().await {
+                        messagebox::alert("Failed to execute action", &format!("{err:?}"), &window);
+                    }
+                });
             }
         ));
 
@@ -88,7 +109,9 @@ impl Window {
             self,
             move |_button| {
                 glib::spawn_future_local(async move {
-                    window.handle_update().await;
+                    if let Err(err) = window.handle_update().await {
+                        messagebox::alert("Failed to update", &format!("{err:?}"), &window);
+                    }
                 });
             }
         ));
@@ -97,7 +120,19 @@ impl Window {
             #[weak(rename_to = window)]
             self,
             move |button| {
-                window.handle_info_bar_clicked(button);
+                if let Err(err) = window.handle_info_bar_clicked(button) {
+                    messagebox::alert("Failed to change page", &format!("{err:?}"), &window);
+                }
+            }
+        ));
+
+        obj.search_entry.connect_search_changed(clone!(
+            #[weak(rename_to = window)]
+            self,
+            move |entry| {
+                if let Err(err) = window.handle_search(entry) {
+                    messagebox::alert("Error while searching", &format!("{err:?}"), &window);
+                }
             }
         ));
     }
@@ -120,85 +155,75 @@ impl Window {
         obj.dropdown_provider.set_model(Some(&model));
     }
 
-    async fn handle_update_all(&self) {
+    async fn handle_update_all(&self) -> Result<()> {
         let obj = self.imp();
 
-        let mut password = None;
+        let mut password = obj.password.borrow().clone();
+
         let some_root_required = obj
             .providers
             .borrow()
             .iter()
             .any(|provider| provider.is_root_required());
-        if some_root_required {
-            password = messagebox::ask_password(&self.window()).await;
+
+        if some_root_required && password.is_none() {
+            password = messagebox::ask_password(&self).await;
+            obj.password.replace(password.clone());
+            if password.is_none() {
+                return Err(anyhow!("Failed to get password"));
+            }
         }
-        obj.password.replace(password.clone());
-        let password = match password {
-            Some(value) => value,
-            _ => return,
-        };
-        self.goto_command();
 
-        let text_command = obj.text_command.clone();
+        self.goto_command()?;
 
-        let buffer = TextBuffer::builder().text("").build();
-        let _ = buffer.connect_changed(move |buff| {
-            let mut end = buff.end_iter();
-            text_command.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
-        });
-
-        obj.text_command.set_buffer(Some(&buffer));
-        for provider in obj.providers.borrow().iter() {
-            let handle = provider.update(&password, &buffer);
-            let _ = handle.join();
+        let providers = obj.providers.borrow();
+        let count = providers.len();
+        for (index, provider) in providers.iter().enumerate() {
+            let stream = provider.update(password.clone());
+            let join_handle = self.write_command_page(index == count - 1, stream?);
+            let _ = join_handle.await;
         }
-        obj.dropdown_provider
-            .set_selected(obj.dropdown_provider.selected());
-        obj.info_bar_label.set_text("Finished");
-        obj.info_bar.set_visible(true);
+
+        Ok(())
     }
 
-    fn handle_dropdown_changed(&self, dropdown: &gtk::DropDown) {
+    fn handle_dropdown_changed(&self) -> Result<()> {
         let obj = self.imp();
 
-        let dropdown_text = match dropdown.selected_item().and_downcast::<gtk::StringObject>() {
-            Some(value) => value.string(),
-            None => return,
-        };
+        let dropdown_text = obj
+            .dropdown_provider
+            .selected_item()
+            .and_downcast::<gtk::StringObject>()
+            .context("Failed to get current provider")?
+            .string();
 
-        self.update_model(&dropdown_text);
+        self.update_model(&dropdown_text)?;
 
-        let provider = match self.provider().model() {
-            Ok(value) => value,
-            Err(value) => {
-                messagebox::alert("Error while changing provider", &value, &self.window());
-                return;
-            }
-        };
+        let provider = self.provider().model()?;
         obj.filter_list.set_model(Some(&provider));
         obj.single_selection.set_model(Some(&obj.filter_list));
 
         obj.header_bar.set_visible(true);
-        let current_page = obj.stack.visible_child_name();
-        let current_page = match current_page {
+        let current_page = match obj.stack.visible_child_name() {
             Some(v) => v.to_string(),
             None => "splash".to_string(),
         };
         if current_page == "splash" {
-            let widget = obj.stack.child_by_name("main_page").unwrap();
+            let widget = self.page_by_name("main_page")?;
             obj.stack.set_visible_child(&widget);
         }
+        Ok(())
     }
 
-    fn handle_selection_changed(&self, grid: &SingleSelection, position: u32) {
+    fn handle_selection_changed(&self, grid: &SingleSelection, position: u32) -> Result<()> {
         let obj = self.imp();
 
-        let item = match grid.item(position) {
-            Some(value) => value.downcast::<PackageObject>().unwrap(),
-            None => return,
-        };
+        let item = grid
+            .item(position)
+            .and_downcast::<PackageObject>()
+            .context("Failed to get item")?;
         let provider = self.provider();
-        let info = provider.package_info(&item.qualifiedName());
+        let info = provider.package_info(item.qualifiedName())?;
         let buffer = TextBuffer::builder().text(info).build();
 
         obj.text_box.set_buffer(Some(&buffer));
@@ -210,75 +235,130 @@ impl Window {
             obj.action.set_label("Install");
         }
         obj.action.set_sensitive(true);
+
+        Ok(())
     }
 
-    async fn handle_action(&self) {
+    async fn handle_action(&self) -> Result<()> {
         let obj = self.imp();
 
-        let item = match obj.single_selection.selected_item() {
-            Some(value) => value.downcast::<PackageObject>().unwrap(),
-            None => return,
-        };
+        let item = obj
+            .single_selection
+            .selected_item()
+            .and_downcast::<PackageObject>()
+            .context("Failed to get item")?;
         let buffer = TextBuffer::builder().text("").build();
-        let action = obj.action.label().unwrap();
+        let action = obj
+            .action
+            .label()
+            .context("Unable to identify the action (Install or Remove)")?;
         obj.text_command.set_buffer(Some(&buffer));
-        let password = match self.password().await {
-            Some(value) => value,
-            _ => return,
-        };
-        self.goto_command();
-        let handle = match action.as_str() {
+        let password = self.password().await.context("Failed to get password")?;
+        self.goto_command()?;
+
+        let stream = match action.as_str() {
             "Install" => self
                 .provider()
-                .install(&password, &item.qualifiedName(), &buffer),
-            "Remove" => self
-                .provider()
-                .remove(&password, &item.qualifiedName(), &buffer),
-            _ => return,
-        };
-        self.command_finished(handle);
+                .install(Some(password), item.qualifiedName()),
+            "Remove" => self.provider().remove(Some(password), item.qualifiedName()),
+            _ => Err(anyhow!("Invalid Action. ")),
+        }?;
+
+        let _ = self.write_command_page(true, stream);
+
+        Ok(())
     }
 
-    async fn handle_update(&self) {
-        let obj = self.imp();
+    async fn handle_update(&self) -> Result<()> {
+        let password = self.password().await.context("Failed to get password")?;
 
-        let buffer = TextBuffer::builder().text("").build();
-        obj.text_command.set_buffer(Some(&buffer));
-        let password = match self.password().await {
-            Some(value) => value,
-            _ => return,
-        };
-        self.goto_command();
-        let handle = self.provider().update(&password, &buffer);
-        self.command_finished(handle);
+        self.goto_command()?;
+
+        let stream = self.provider().update(Some(password))?;
+        let _ = self.write_command_page(true, stream);
+
+        Ok(())
     }
 
-    fn handle_info_bar_clicked(&self, _: &gtk::Button) {
+    fn handle_info_bar_clicked(&self, _: &gtk::Button) -> Result<()> {
         let obj = self.imp();
 
-        let widget = obj.stack.child_by_name("main_page").unwrap();
+        let widget = self.page_by_name("main_page")?;
         obj.info_bar.set_visible(false);
         obj.stack.set_visible_child(&widget);
         obj.search_entry.set_sensitive(true);
         obj.update.set_sensitive(true);
         obj.dropdown_provider.set_sensitive(true);
+
+        Ok(())
     }
 
-    fn update_model(&self, provider_name: &str) {
+    fn update_model(&self, provider_name: &str) -> Result<()> {
         let mut providers = self.imp().providers.borrow_mut();
         let provider = providers
             .iter_mut()
             .find(|provider| provider.name().eq(&provider_name))
-            .unwrap();
-        let _ = provider.update_packages();
+            .context("Provider not found")?;
+        provider.update_packages()
     }
 
-    fn window(&self) -> gtk::Window {
-        let widget = self.imp().search_entry.clone().upcast::<gtk::Widget>();
-        widget
-            .root()
-            .map(|root| root.downcast::<gtk::Window>().unwrap())
-            .unwrap()
+    fn handle_search(&self, search: &gtk::SearchEntry) -> Result<()> {
+        let obj = self.imp();
+
+        obj.single_selection.unselect_all();
+        let value = search.text().to_ascii_lowercase();
+        let filter = gtk::CustomFilter::new(move |obj| {
+            if let Some(obj) = obj.downcast_ref::<PackageObject>() {
+                obj.qualifiedName().to_ascii_lowercase().contains(&value)
+            } else {
+                false
+            }
+        });
+        obj.filter_list.set_filter(Some(&filter));
+        Ok(())
+    }
+
+    fn write_command_page(&self, finish: bool, mut stream: CommandStream) -> glib::JoinHandle<()> {
+        let (sender, receiver) = unbounded();
+        let obj = self.imp();
+
+        let buffer = TextBuffer::builder().text("").build();
+        obj.text_command.set_buffer(Some(&buffer));
+        let _ = buffer.connect_changed(clone!(
+            #[weak(rename_to = text_command)]
+            obj.text_command,
+            move |buff| {
+                let mut end = buff.end_iter();
+                text_command.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
+            }
+        ));
+
+        obj.text_command.set_buffer(Some(&buffer));
+
+        spawn(move || {
+            while let Some(value) = stream.next() {
+                let _ = sender.send_blocking(value);
+            }
+            stream.close();
+        });
+
+        glib::spawn_future_local(clone!(
+            #[weak(rename_to = window)]
+            self,
+            async move {
+                while let Ok(result) = receiver.recv().await {
+                    let mut text_iter = buffer.end_iter();
+                    buffer.insert(&mut text_iter, &format!("{result}\n"));
+                }
+                if !finish {
+                    return;
+                }
+                let obj = window.imp();
+                obj.info_bar.set_visible(true);
+                obj.info_bar_label.set_text("Finished.  ");
+                let _ = window.handle_dropdown_changed();
+            }
+        ))
     }
 
     fn provider<'a>(&'a self) -> Ref<'a, ProviderKind> {
@@ -287,7 +367,7 @@ impl Window {
             providers
                 .iter()
                 .find(|provider| provider.name().eq(&self.dropdown_text()))
-                .unwrap()
+                .unwrap() // TODO remover
         })
     }
 
@@ -312,7 +392,7 @@ impl Window {
         let provider = self.provider();
         let is_root_required = provider.is_root_required();
         if is_root_required {
-            let password = messagebox::ask_password(&self.window()).await;
+            let password = messagebox::ask_password(&self).await;
             obj.password.replace(password.clone());
             password
         } else {
@@ -320,40 +400,21 @@ impl Window {
         }
     }
 
-    pub fn goto_command(&self) {
+    pub fn goto_command(&self) -> Result<()> {
         let obj = self.imp();
 
-        let widget = obj.stack.child_by_name("command_page").unwrap();
+        let widget = self.page_by_name("command_page")?;
         obj.stack.set_visible_child(&widget);
         obj.search_entry.set_sensitive(false);
         obj.update.set_sensitive(false);
         obj.dropdown_provider.set_sensitive(false);
+        Ok(())
     }
 
-    fn command_finished(&self, handle: JoinHandle<bool>) {
-        let obj = self.imp();
-        let u32_provider = obj.dropdown_provider.selected();
-        // TODO corrigir
-        // combobox_provider.set_selected(None);
-        let (sender, receiver) = async_channel::unbounded();
-        thread::spawn(move || {
-            let res = handle.join().unwrap();
-            if res {
-                let _ = sender.send_blocking("Finalizado com sucesso! ");
-            } else {
-                let _ = sender.send_blocking("Finalizado com erro ");
-            }
-        });
-        glib::spawn_future_local(clone!(
-            #[weak]
-            obj,
-            async move {
-                if let Ok(res) = receiver.recv().await {
-                    obj.info_bar.set_visible(true);
-                    obj.info_bar_label.set_text(res);
-                    obj.dropdown_provider.set_selected(u32_provider);
-                }
-            }
-        ));
+    fn page_by_name(&self, name: &str) -> Result<gtk::Widget> {
+        self.imp()
+            .stack
+            .child_by_name(name)
+            .context("Failed to get page")
     }
 }
