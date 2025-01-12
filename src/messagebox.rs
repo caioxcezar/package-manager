@@ -1,15 +1,32 @@
+use glib::clone;
+use gtk::gio::Cancellable;
+use gtk::glib;
 use gtk::{prelude::*, AlertDialog};
 use secstr::{SecStr, SecVec};
 
 use crate::{backend::command, window::Window};
 
 pub fn alert(title: &str, body: &str, window: &Window) {
-    AlertDialog::builder()
+    let alert = AlertDialog::builder()
         .message(title)
         .detail(body)
         .modal(true)
-        .build()
-        .show(Some(window));
+        .build();
+
+    let cancellable = Cancellable::default();
+
+    alert.choose(
+        Some(window),
+        Some(&cancellable),
+        clone!(
+            #[weak]
+            cancellable,
+            move |_| {
+                cancellable.cancel();
+            }
+        ),
+    );
+    // alert.show(Some(window));
 }
 
 pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {
