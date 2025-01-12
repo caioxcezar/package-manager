@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 use secstr::SecVec;
-use std::io::{BufRead, BufReader, Lines};
+use std::io::{BufRead, BufReader, Lines, Read};
 use std::process::{Child, ChildStdout, Command, Stdio};
 
 fn build_command(command: String, root_pass: Option<SecVec<u8>>) -> Result<Command> {
@@ -40,15 +40,9 @@ pub struct CommandStream {
 impl CommandStream {
     pub fn new(command: String, root_pass: Option<SecVec<u8>>) -> Result<Self> {
         let mut child = build_command(command, root_pass)?
-            // .stdin(Stdio::piped())
+            .stderr(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
-
-        // let mut stdin = child.stdin.take().context("Failed to open stdin")?;
-        // if let Some(pass) = root_pass {
-        //     stdin.write_all(pass.unsecure())?;
-        //     stdin.write_all("\n".as_bytes())?;
-        // }
 
         let stdout = child.stdout.take().context("Failed to run command")?;
         let stdout_reader = BufReader::new(stdout);
@@ -57,10 +51,16 @@ impl CommandStream {
         Ok(CommandStream { child, lines })
     }
 
-    pub fn close(&mut self) -> bool {
-        match self.child.wait() {
-            Ok(value) => value.success(),
-            _ => false,
+    pub fn close(&mut self) -> Result<()> {
+        let result = self.child.wait()?;
+        if result.success() {
+            Ok(())
+        } else {
+            let stdout = self.child.stderr.take().context("Failed to run command")?;
+            let mut stdout_reader = BufReader::new(stdout);
+            let mut buf = "".to_string();
+            stdout_reader.read_to_string(&mut buf)?;
+            Err(anyhow!(buf))
         }
     }
 }

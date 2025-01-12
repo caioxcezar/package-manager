@@ -179,8 +179,8 @@ impl Window {
         let providers = obj.providers.borrow();
         let count = providers.len();
         for (index, provider) in providers.iter().enumerate() {
-            let stream = provider.update(password.clone());
-            let join_handle = self.write_command_page(index == count - 1, stream?);
+            let stream = provider.update(password.clone())?;
+            let join_handle = self.write_command_page(index == count - 1, stream);
             let _ = join_handle.await;
         }
 
@@ -339,7 +339,11 @@ impl Window {
             while let Some(value) = stream.next() {
                 let _ = sender.send_blocking(value);
             }
-            stream.close();
+            let message = match stream.close() {
+                Ok(_) => "Command completed successfully. ".to_string(),
+                Err(err) => format!("{err:?}\nCommand ended with failure. "),
+            };
+            let _ = sender.send_blocking(message);
         });
 
         glib::spawn_future_local(clone!(
@@ -347,8 +351,7 @@ impl Window {
             self,
             async move {
                 while let Ok(result) = receiver.recv().await {
-                    let mut text_iter = buffer.end_iter();
-                    buffer.insert(&mut text_iter, &format!("{result}\n"));
+                    buffer.insert(&mut buffer.end_iter(), &format!("{result}\n"));
                 }
                 if !finish {
                     return;

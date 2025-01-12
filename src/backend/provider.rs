@@ -1,9 +1,9 @@
-use std::any::Any;
-
 use super::{
     command::CommandStream,
     package_object::PackageData,
-    providers_impl::{dnf::Dnf, flatpak::Flatpak, pacman::Pacman, paru::Paru, winget::Winget},
+    providers_impl::{
+        dnf::Dnf, flatpak::Flatpak, pacman::Pacman, paru::Paru, protonge::ProtonGE, winget::Winget,
+    },
 };
 use crate::backend::package_object::PackageObject;
 use anyhow::Result;
@@ -17,7 +17,7 @@ pub enum ProviderKind {
     FLATPAK(Flatpak),
     PACMAN(Pacman),
     PARU(Paru),
-    // PROTONGE(ProtonGE),
+    PROTONGE(ProtonGE),
     WINGET(Winget),
     DNF(Dnf),
 }
@@ -28,7 +28,7 @@ impl ProviderKind {
             ProviderKind::FLATPAK(provider) => provider,
             ProviderKind::PACMAN(provider) => provider,
             ProviderKind::PARU(provider) => provider,
-            // ProviderKind::PROTONGE(provider) => provider,
+            ProviderKind::PROTONGE(provider) => provider,
             ProviderKind::WINGET(provider) => provider,
             ProviderKind::DNF(provider) => provider,
         }
@@ -38,7 +38,7 @@ impl ProviderKind {
             ProviderKind::FLATPAK(provider) => provider,
             ProviderKind::PACMAN(provider) => provider,
             ProviderKind::PARU(provider) => provider,
-            // ProviderKind::PROTONGE(provider) => provider,
+            ProviderKind::PROTONGE(provider) => provider,
             ProviderKind::WINGET(provider) => provider,
             ProviderKind::DNF(provider) => provider,
         }
