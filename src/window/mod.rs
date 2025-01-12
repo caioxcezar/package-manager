@@ -176,7 +176,7 @@ impl Window {
 
         self.goto_command()?;
 
-        let providers = obj.providers.borrow();
+        let providers = obj.providers.borrow().clone();
         let count = providers.len();
         for (index, provider) in providers.iter().enumerate() {
             let stream = provider.update(password.clone())?;
