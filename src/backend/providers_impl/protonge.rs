@@ -61,49 +61,6 @@ impl Default for ProtonGE {
 
 impl ProviderActions for ProtonGE {
     fn load_packages(&mut self) -> Result<()> {
-        let proton_location = self.proton_location()?;
-        let proton_dir = fs::read_dir(proton_location)?;
-        let proton: Vec<String> = proton_dir
-            .map(|dir| -> Result<String> {
-                let entry = dir?;
-                let file_type = entry.file_type()?;
-                if file_type.is_dir() {
-                    let name = entry
-                        .file_name()
-                        .to_str()
-                        .context("Failed to get folder name")?
-                        .to_owned();
-                    Ok(name)
-                } else {
-                    Err(anyhow!("Not a Folder"))
-                }
-            })
-            .filter_map(|v| v.ok())
-            .collect();
-        let resp = api::get::<Vec<ApiResponse>>(&self.endpoint)?;
-        self.packages_description = resp;
-        self.packages = self
-            .packages_description
-            .par_iter()
-            .map(|package| {
-                let name = &package.tag_name;
-                let name = if name.contains("GE-Proton") {
-                    package.tag_name.to_owned()
-                } else {
-                    format!("GE-Proton{}", name)
-                };
-                let version = &name[9..];
-                PackageData {
-                    name: name.to_owned(),
-                    qualified_name: name.to_owned(),
-                    repository: "GloriousEggroll".to_owned(),
-                    version: version.to_string(),
-                    installed: proton.contains(&name),
-                }
-            })
-            .collect();
-        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
-        self.total = self.packages.len();
         Ok(())
     }
     fn name(&self) -> String {
@@ -154,7 +111,11 @@ impl ProviderActions for ProtonGE {
         CommandStream::new("echo Removed. ".to_string(), None)
     }
     fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
-        let pkg = self.packages[0].clone();
+        let pkg = if self.packages.is_empty() {
+            ProtonGE::new()?.packages[0].clone()
+        } else {
+            self.packages[0].clone()
+        };
 
         if !pkg.installed {
             self.download(&pkg.name)
@@ -183,6 +144,57 @@ impl ProviderActions for ProtonGE {
     }
 }
 impl ProtonGE {
+    fn new() -> Result<Self> {
+        let mut protonge = ProtonGE::default();
+        let proton_location = protonge.proton_location()?;
+        let proton_dir = fs::read_dir(proton_location)?;
+        let proton: Vec<String> = proton_dir
+            .map(|dir| -> Result<String> {
+                let entry = dir?;
+                let file_type = entry.file_type()?;
+                if file_type.is_dir() {
+                    let name = entry
+                        .file_name()
+                        .to_str()
+                        .context("Failed to get folder name")?
+                        .to_owned();
+                    Ok(name)
+                } else {
+                    Err(anyhow!("Not a Folder"))
+                }
+            })
+            .filter_map(|v| v.ok())
+            .collect();
+        let resp = api::get::<Vec<ApiResponse>>(&protonge.endpoint)?;
+        protonge.packages_description = resp;
+        protonge.packages = protonge
+            .packages_description
+            .par_iter()
+            .map(|package| {
+                let name = &package.tag_name;
+                let name = if name.contains("GE-Proton") {
+                    package.tag_name.to_owned()
+                } else {
+                    format!("GE-Proton{}", name)
+                };
+                let version = &name[9..];
+                PackageData {
+                    name: name.to_owned(),
+                    qualified_name: name.to_owned(),
+                    repository: "GloriousEggroll".to_owned(),
+                    version: version.to_string(),
+                    installed: proton.contains(&name),
+                }
+            })
+            .collect();
+        protonge.installed = protonge
+            .packages
+            .par_iter()
+            .filter(|&p| p.installed)
+            .count();
+        protonge.total = protonge.packages.len();
+        Ok(protonge)
+    }
     fn api_package_data(&self, tag_name: &str) -> Result<&ApiResponse> {
         self.packages_description
             .par_iter()
