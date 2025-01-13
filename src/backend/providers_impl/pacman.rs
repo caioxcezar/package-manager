@@ -6,6 +6,7 @@ use crate::backend::{
     command::{self, CommandStream},
     package_object::PackageData,
     provider::ProviderActions,
+    utils::pass_2_stdin,
 };
 #[derive(Clone, Debug)]
 pub struct Pacman {
@@ -73,13 +74,22 @@ impl ProviderActions for Pacman {
         command::run(&format!("pacman -Si {}", package))
     }
     fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("pacman -Syu {} --noconfirm", package), password)
+        CommandStream::new(
+            format!("sudo -S pacman -Syu {} --noconfirm", package),
+            Some(pass_2_stdin(password)?),
+        )
     }
     fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("pacman -Runs {} --noconfirm", package), password)
+        CommandStream::new(
+            format!("sudo -S pacman -Runs {} --noconfirm", package),
+            Some(pass_2_stdin(password)?),
+        )
     }
     fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
-        CommandStream::new("pacman -Syu --noconfirm".to_string(), password)
+        CommandStream::new(
+            "sudo -S pacman -Syu --noconfirm".to_string(),
+            Some(pass_2_stdin(password)?),
+        )
     }
     fn is_available(&self) -> bool {
         let packages = command::run("pacman --version");
