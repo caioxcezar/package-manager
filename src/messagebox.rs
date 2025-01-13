@@ -26,7 +26,6 @@ pub fn alert(title: &str, body: &str, window: &Window) {
             }
         ),
     );
-    // alert.show(Some(window));
 }
 
 pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {

@@ -7,6 +7,7 @@ use crate::backend::{
     command::{self, CommandStream},
     package_object::PackageData,
     provider::ProviderActions,
+    utils::pass_2_stdin,
 };
 #[derive(Clone, Debug)]
 pub struct Dnf {
@@ -91,13 +92,22 @@ impl ProviderActions for Dnf {
         command::run(&format!("dnf info {}", package))
     }
     fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("sudo -S dnf install {} -y", package), password)
+        CommandStream::new(
+            format!("sudo -S dnf install {} -y", package),
+            Some(pass_2_stdin(password)?),
+        )
     }
     fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("sudo -S dnf remove {} -y", package), password)
+        CommandStream::new(
+            format!("sudo -S dnf remove {} -y", package),
+            Some(pass_2_stdin(password)?),
+        )
     }
     fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
-        CommandStream::new(format!("sudo -S dnf update -y"), password)
+        CommandStream::new(
+            format!("sudo -S dnf update -y"),
+            Some(pass_2_stdin(password)?),
+        )
     }
     fn is_available(&self) -> bool {
         let packages = command::run("dnf --version");
