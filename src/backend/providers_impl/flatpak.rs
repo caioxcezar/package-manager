@@ -1,5 +1,3 @@
-use std::ops::Index;
-
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use secstr::SecVec;
