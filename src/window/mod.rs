@@ -81,8 +81,8 @@ impl Window {
         obj.single_selection.connect_selection_changed(clone!(
             #[weak(rename_to = window)]
             self,
-            move |grid, position, _n_items| {
-                if let Err(err) = window.handle_selection_changed(grid, position) {
+            move |grid, _position, _n_items| {
+                if let Err(err) = window.handle_selection_changed(grid) {
                     messagebox::alert(
                         "Failed to change the dropdown",
                         &format!("{err:?}"),
@@ -215,11 +215,11 @@ impl Window {
         Ok(())
     }
 
-    fn handle_selection_changed(&self, grid: &SingleSelection, position: u32) -> Result<()> {
+    fn handle_selection_changed(&self, grid: &SingleSelection) -> Result<()> {
         let obj = self.imp();
 
         let item = grid
-            .item(position)
+            .selected_item()
             .and_downcast::<PackageObject>()
             .context("Failed to get item")?;
         let provider = self.provider();

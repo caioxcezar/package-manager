@@ -19,7 +19,8 @@ pub fn run(command: &str) -> Result<String> {
     let output = build_command(command)?.output()?;
 
     if output.status.success() {
-        Ok(String::from_utf8(output.stdout)?)
+        let msg = String::from_utf8(output.stdout)?;
+        Ok(msg)
     } else {
         let err_msg = String::from_utf8(output.stderr)?;
         Err(anyhow!(err_msg))
