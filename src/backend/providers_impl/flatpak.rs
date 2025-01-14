@@ -1,4 +1,6 @@
-use anyhow::Result;
+use std::ops::Index;
+
+use anyhow::{Context, Result};
 use rayon::prelude::*;
 use secstr::SecVec;
 
@@ -96,8 +98,10 @@ impl ProviderActions for Flatpak {
         )
     }
     fn remove(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        let idx_name = package.find(' ').context("Package name not found")?;
+        let package_name = package[idx_name..].to_string();
         CommandStream::new(
-            format!("flatpak remove {} -y --noninteractive", package),
+            format!("flatpak remove {} -y --noninteractive", package_name),
             None,
         )
     }
