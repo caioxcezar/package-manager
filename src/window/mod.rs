@@ -10,10 +10,9 @@ use glib::{clone, Object};
 use gtk::{
     gio, glib,
     prelude::{
-        ButtonExt, Cast, CastNone, EditableExt, ListModelExt, SelectionModelExt, TextBufferExt,
+        ButtonExt, Cast, CastNone, EditableExt, SelectionModelExt, StaticType, TextBufferExt,
         TextViewExt, WidgetExt,
     },
-    SingleSelection, StringList, TextBuffer,
 };
 use secstr::{SecStr, SecVec};
 
@@ -51,6 +50,16 @@ impl Window {
         obj.filter_list.set_incremental(true);
 
         Ok(())
+    }
+
+    fn setup_sorter(&self) {
+        let obj = self.imp();
+
+        let sorter = string_sorter_package("name");
+        obj.column_name.set_sorter(Some(&sorter));
+
+        let sorter = string_sorter_package("repository");
+        obj.column_repository.set_sorter(Some(&sorter));
     }
 
     fn setup_signals(&self) {
@@ -145,7 +154,7 @@ impl Window {
         let model = providers
             .iter()
             .map(|provider| provider.name())
-            .collect::<StringList>();
+            .collect::<gtk::StringList>();
 
         if providers.is_empty() {
             obj.update_all.set_sensitive(false);
@@ -199,8 +208,11 @@ impl Window {
 
         self.update_model(&dropdown_text)?;
 
-        let provider = self.provider().model()?;
-        obj.filter_list.set_model(Some(&provider));
+        let model = self.provider().model()?;
+        let sorter = installed_package();
+
+        let sort_model = gtk::SortListModel::new(Some(model), Some(sorter));
+        obj.filter_list.set_model(Some(&sort_model));
         obj.single_selection.set_model(Some(&obj.filter_list));
 
         obj.header_bar.set_visible(true);
@@ -215,7 +227,7 @@ impl Window {
         Ok(())
     }
 
-    fn handle_selection_changed(&self, grid: &SingleSelection) -> Result<()> {
+    fn handle_selection_changed(&self, grid: &gtk::SingleSelection) -> Result<()> {
         let obj = self.imp();
 
         let item = grid
@@ -224,7 +236,7 @@ impl Window {
             .context("Failed to get item")?;
         let provider = self.provider();
         let info = provider.package_info(item.qualifiedName())?;
-        let buffer = TextBuffer::builder().text(info).build();
+        let buffer = gtk::TextBuffer::builder().text(info).build();
 
         obj.text_box.set_buffer(Some(&buffer));
         obj.text_box.set_visible(true);
@@ -247,7 +259,7 @@ impl Window {
             .selected_item()
             .and_downcast::<PackageObject>()
             .context("Failed to get item")?;
-        let buffer = TextBuffer::builder().text("").build();
+        let buffer = gtk::TextBuffer::builder().text("").build();
         let action = obj
             .action
             .label()
@@ -322,7 +334,7 @@ impl Window {
         let (sender, receiver) = unbounded();
         let obj = self.imp();
 
-        let buffer = TextBuffer::builder().text("").build();
+        let buffer = gtk::TextBuffer::builder().text("").build();
         obj.text_command.set_buffer(Some(&buffer));
         let _ = buffer.connect_changed(clone!(
             #[weak(rename_to = text_command)]
@@ -420,4 +432,31 @@ impl Window {
             .child_by_name(name)
             .context("Failed to get page")
     }
+}
+
+fn string_sorter_package(name: &str) -> gtk::StringSorter {
+    gtk::StringSorter::builder()
+        .ignore_case(true)
+        .expression(gtk::PropertyExpression::new(
+            PackageObject::static_type(),
+            gtk::Expression::NONE,
+            name,
+        ))
+        .build()
+}
+
+fn installed_package() -> gtk::CustomSorter {
+    gtk::CustomSorter::new(move |obj1, obj2| {
+        let package_1 = obj1
+            .downcast_ref::<PackageObject>()
+            .expect("The object needs to be of type `PackageObject`.");
+        let package_2 = obj2
+            .downcast_ref::<PackageObject>()
+            .expect("The object needs to be of type `PackageObject`.");
+
+        let bool_1 = package_1.installed();
+        let bool_2 = package_2.installed();
+
+        bool_2.cmp(&bool_1).into()
+    })
 }

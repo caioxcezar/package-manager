@@ -44,6 +44,16 @@ pub struct Window {
     pub info_bar_button: TemplateChild<gtk::Button>,
     #[template_child]
     pub splash: TemplateChild<gtk::Picture>,
+
+    #[template_child]
+    pub column_installed: TemplateChild<gtk::ColumnViewColumn>,
+    #[template_child]
+    pub column_name: TemplateChild<gtk::ColumnViewColumn>,
+    #[template_child]
+    pub column_version: TemplateChild<gtk::ColumnViewColumn>,
+    #[template_child]
+    pub column_repository: TemplateChild<gtk::ColumnViewColumn>,
+
     pub filter_list: gtk::FilterListModel,
     pub providers: RefCell<Vec<ProviderKind>>,
     pub password: RefCell<Option<SecVec<u8>>>,
@@ -81,7 +91,7 @@ impl ObjectImpl for Window {
             self,
             move || {
                 let obj = window.obj();
-
+                obj.setup_sorter();
                 obj.setup_signals();
                 obj.setup_data();
             }
