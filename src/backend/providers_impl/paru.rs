@@ -76,19 +76,25 @@ impl ProviderActions for Paru {
     }
     fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
-            format!("sudo -S su && paru -Syu {} --noconfirm", package),
+            format!(
+                "sudo -S su && paru -Syu {} --noconfirm --sudoflags -S",
+                package
+            ),
             Some(pass_2_stdin(password)?),
         )
     }
     fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
-            format!("sudo -S su && paru -Runs {} --noconfirm", package),
+            format!(
+                "sudo -S su && paru -Runs {} --noconfirm --sudoflags -S",
+                package
+            ),
             Some(pass_2_stdin(password)?),
         )
     }
     fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
         CommandStream::new(
-            "sudo -S su && paru -Syu --noconfirm".to_string(),
+            "paru -Syu --noconfirm --sudoflags -S".to_string(),
             Some(pass_2_stdin(password)?),
         )
     }
