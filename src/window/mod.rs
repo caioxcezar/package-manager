@@ -52,6 +52,7 @@ impl Window {
         Ok(())
     }
 
+    // FIXME Sorter not working
     fn setup_sorter(&self) {
         let obj = self.imp();
 
