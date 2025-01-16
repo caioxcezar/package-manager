@@ -55,10 +55,16 @@ impl Window {
     fn setup_sorter(&self) {
         let obj = self.imp();
 
-        let sorter = string_sorter_package("name");
+        let sorter = sorter_installed_package();
+        obj.column_installed.set_sorter(Some(&sorter));
+
+        let sorter = sorter_string_package("name");
         obj.column_name.set_sorter(Some(&sorter));
 
-        let sorter = string_sorter_package("repository");
+        let sorter = sorter_string_package("version");
+        obj.column_version.set_sorter(Some(&sorter));
+
+        let sorter = sorter_string_package("repository");
         obj.column_repository.set_sorter(Some(&sorter));
     }
 
@@ -209,10 +215,9 @@ impl Window {
         self.update_model(&dropdown_text)?;
 
         let model = self.provider().model()?;
-        let sorter = installed_package();
-
-        let sort_model = gtk::SortListModel::new(Some(model), Some(sorter));
-        obj.filter_list.set_model(Some(&sort_model));
+        let sorter = obj.column_installed.sorter();
+        let model = gtk::SortListModel::new(Some(model), sorter);
+        obj.filter_list.set_model(Some(&model));
         obj.single_selection.set_model(Some(&obj.filter_list));
 
         obj.header_bar.set_visible(true);
@@ -434,7 +439,7 @@ impl Window {
     }
 }
 
-fn string_sorter_package(name: &str) -> gtk::StringSorter {
+fn sorter_string_package(name: &str) -> gtk::StringSorter {
     gtk::StringSorter::builder()
         .ignore_case(true)
         .expression(gtk::PropertyExpression::new(
@@ -445,7 +450,7 @@ fn string_sorter_package(name: &str) -> gtk::StringSorter {
         .build()
 }
 
-fn installed_package() -> gtk::CustomSorter {
+fn sorter_installed_package() -> gtk::CustomSorter {
     gtk::CustomSorter::new(move |obj1, obj2| {
         let package_1 = obj1
             .downcast_ref::<PackageObject>()
