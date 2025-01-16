@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use rayon::prelude::*;
 use secstr::SecVec;
 use serde::Deserialize;
-use std::fs;
+use std::fs::{self, DirEntry};
 use std::path::Path;
 
 #[derive(Clone, Debug)]
@@ -61,6 +61,11 @@ impl Default for ProtonGE {
 
 impl ProviderActions for ProtonGE {
     fn load_packages(&mut self) -> Result<()> {
+        let provider = Self::new()?;
+        self.packages_description = provider.packages_description;
+        self.packages = provider.packages;
+        self.installed = provider.installed;
+        self.total = provider.total;
         Ok(())
     }
     fn name(&self) -> String {
@@ -148,23 +153,7 @@ impl ProtonGE {
         let mut protonge = ProtonGE::default();
         let proton_location = protonge.proton_location()?;
         let proton_dir = fs::read_dir(proton_location)?;
-        let proton: Vec<String> = proton_dir
-            .map(|dir| -> Result<String> {
-                let entry = dir?;
-                let file_type = entry.file_type()?;
-                if file_type.is_dir() {
-                    let name = entry
-                        .file_name()
-                        .to_str()
-                        .context("Failed to get folder name")?
-                        .to_owned();
-                    Ok(name)
-                } else {
-                    Err(anyhow!("Not a Folder"))
-                }
-            })
-            .filter_map(|v| v.ok())
-            .collect();
+        let proton: Vec<String> = proton_dir.filter_map(|dir| filter_dir(dir).ok()).collect();
         let resp = api::get::<Vec<ApiResponse>>(&protonge.endpoint)?;
         protonge.packages_description = resp;
         protonge.packages = protonge
@@ -229,5 +218,20 @@ impl ProtonGE {
             let _ = fs::create_dir_all(format!("{}{}", home, &self.folder_path));
         }
         Ok(path)
+    }
+}
+
+fn filter_dir(dir: Result<DirEntry, std::io::Error>) -> Result<String> {
+    let entry = dir?;
+    let file_type = entry.file_type()?;
+    if file_type.is_dir() {
+        let name = entry
+            .file_name()
+            .to_str()
+            .context("Failed to get folder name")?
+            .to_owned();
+        Ok(name)
+    } else {
+        Err(anyhow!("Not a Folder"))
     }
 }
