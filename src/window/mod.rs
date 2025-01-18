@@ -353,7 +353,7 @@ impl Window {
         obj.single_selection.unselect_all();
         let value = search.text();
         let filter = gtk::CustomFilter::new(move |obj| {
-            if value.len() == 0 {
+            if value.is_empty() {
                 true
             } else if let Some(obj) = obj.downcast_ref::<PackageObject>() {
                 let prec = fuzzy_compare(&obj.qualifiedName(), &value);
