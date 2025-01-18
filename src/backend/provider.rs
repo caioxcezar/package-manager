@@ -5,7 +5,6 @@ use super::{
         dnf::Dnf, flatpak::Flatpak, pacman::Pacman, paru::Paru, protonge::ProtonGE, winget::Winget,
     },
 };
-use crate::backend::package_object::PackageObject;
 use anyhow::Result;
 use gtk::gio::ListStore;
 use secstr::SecVec;
@@ -68,17 +67,12 @@ impl ProviderKind {
         self.as_mut_provider_actions().load_packages()
     }
     pub fn model(&self) -> Result<ListStore> {
-        let list_store = ListStore::new::<PackageObject>();
-
-        for value in self.as_provider_actions().packages() {
-            list_store.append(&PackageObject::new(
-                value.installed,
-                value.repository.to_owned(),
-                value.name.to_owned(),
-                value.version.to_owned(),
-                value.qualified_name.to_owned(),
-            ));
-        }
+        let list_store = ListStore::from_iter(
+            self.as_provider_actions()
+                .packages()
+                .iter()
+                .map(|value| value.cast()),
+        );
         Ok(list_store)
     }
     pub fn available_providers() -> Vec<ProviderKind> {

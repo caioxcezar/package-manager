@@ -19,8 +19,6 @@ pub struct Window {
     #[template_child]
     pub stack: TemplateChild<gtk::Stack>,
     #[template_child]
-    pub column_view: TemplateChild<gtk::ColumnView>,
-    #[template_child]
     pub search_entry: TemplateChild<gtk::SearchEntry>,
     #[template_child]
     pub dropdown_provider: TemplateChild<gtk::DropDown>,
@@ -33,8 +31,6 @@ pub struct Window {
     #[template_child]
     pub text_box: TemplateChild<gtk::TextView>,
     #[template_child]
-    pub single_selection: TemplateChild<gtk::SingleSelection>,
-    #[template_child]
     pub text_command: TemplateChild<gtk::TextView>,
     #[template_child]
     pub info_bar: TemplateChild<gtk::Overlay>,
@@ -45,6 +41,10 @@ pub struct Window {
     #[template_child]
     pub splash: TemplateChild<gtk::Picture>,
 
+    #[template_child]
+    pub column_view: TemplateChild<gtk::ColumnView>,
+    #[template_child]
+    pub single_selection: TemplateChild<gtk::SingleSelection>,
     #[template_child]
     pub column_installed: TemplateChild<gtk::ColumnViewColumn>,
     #[template_child]
