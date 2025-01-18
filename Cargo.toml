@@ -1,6 +1,6 @@
 [package]
 name = "package-manager"
-version = "1.6.5"
+version = "1.7.0"
 edition = "2021"
 
 [dependencies]
@@ -19,6 +19,7 @@ strum_macros = "0.26.4"
 async-channel = "2.3.1"
 features = "0.10.0"
 anyhow = "1.0.95"
+rust-fuzzy-search = "0.1.1"
 
 [build-dependencies]
 glib-build-tools = "0.20.0"

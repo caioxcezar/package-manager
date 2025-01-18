@@ -32,3 +32,15 @@ pub struct PackageData {
     pub version: String,
     pub qualified_name: String,
 }
+
+impl PackageData {
+    pub fn cast(&self) -> PackageObject {
+        PackageObject::new(
+            self.installed,
+            self.repository.to_owned(),
+            self.name.to_owned(),
+            self.version.to_owned(),
+            self.qualified_name.to_owned(),
+        )
+    }
+}

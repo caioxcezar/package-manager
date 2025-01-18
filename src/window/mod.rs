@@ -14,6 +14,7 @@ use gtk::{
         TextViewExt, WidgetExt,
     },
 };
+use rust_fuzzy_search::fuzzy_compare;
 use secstr::{SecStr, SecVec};
 
 use crate::backend::command::CommandStream;
@@ -151,6 +152,19 @@ impl Window {
                 }
             }
         ));
+
+        // TODO impl
+        // if let Some(sorter) = obj.column_view.sorter() {
+        //     sorter.connect_changed(clone!(
+        //         #[weak(rename_to = window)]
+        //         self,
+        //         move |sorter, direction| {
+        //             if let Err(err) = window.handle_sort_changed(sorter, direction) {
+        //                 messagebox::alert("Error while sorting", &format!("{err:?}"), &window);
+        //             }
+        //         }
+        //     ));
+        // }
     }
 
     fn setup_data(&self) {
@@ -240,6 +254,7 @@ impl Window {
             .selected_item()
             .and_downcast::<PackageObject>()
             .context("Failed to get item")?;
+        println!("item: {}", item.qualifiedName());
         let provider = self.provider();
         let info = provider.package_info(item.qualifiedName())?;
         let buffer = gtk::TextBuffer::builder().text(info).build();
@@ -311,6 +326,46 @@ impl Window {
         Ok(())
     }
 
+    // TODO impl
+    // fn handle_sort_changed(
+    //     &self,
+    //     _sorter: &gtk::Sorter,
+    //     _direction: gtk::SorterChange,
+    // ) -> Result<()> {
+    //     // let order = sorter.order();
+
+    //     let obj = self.imp();
+
+    //     let sorter = obj.column_installed.sorter().unwrap();
+    //     let model = obj.column_view.model().context("Unable to get model")?;
+    //     let model = gtk::SortListModel::new(Some(model), Some(sorter));
+
+    //     // obj.column_view.set_model(model);
+    //     obj.filter_list.set_model(Some(&model));
+    //     obj.single_selection.set_model(Some(&obj.filter_list));
+
+    //     Ok(())
+    // }
+
+    fn handle_search(&self, search: &gtk::SearchEntry) -> Result<()> {
+        let obj = self.imp();
+
+        obj.single_selection.unselect_all();
+        let value = search.text();
+        let filter = gtk::CustomFilter::new(move |obj| {
+            if value.len() == 0 {
+                true
+            } else if let Some(obj) = obj.downcast_ref::<PackageObject>() {
+                let prec = fuzzy_compare(&obj.qualifiedName(), &value);
+                prec > 0.11
+            } else {
+                false
+            }
+        });
+        obj.filter_list.set_filter(Some(&filter));
+        Ok(())
+    }
+
     fn update_model(&self, provider_name: &str) -> Result<()> {
         let mut providers = self.imp().providers.borrow_mut();
         let provider = providers
@@ -318,22 +373,6 @@ impl Window {
             .find(|provider| provider.name().eq(&provider_name))
             .context("Provider not found")?;
         provider.update_packages()
-    }
-
-    fn handle_search(&self, search: &gtk::SearchEntry) -> Result<()> {
-        let obj = self.imp();
-
-        obj.single_selection.unselect_all();
-        let value = search.text().to_ascii_lowercase();
-        let filter = gtk::CustomFilter::new(move |obj| {
-            if let Some(obj) = obj.downcast_ref::<PackageObject>() {
-                obj.qualifiedName().to_ascii_lowercase().contains(&value)
-            } else {
-                false
-            }
-        });
-        obj.filter_list.set_filter(Some(&filter));
-        Ok(())
     }
 
     fn write_command_page(&self, finish: bool, mut stream: CommandStream) -> glib::JoinHandle<()> {
