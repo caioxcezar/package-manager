@@ -97,10 +97,12 @@ impl ProviderActions for Flatpak {
             .split('\n')
             .filter(|value| regex.is_match(value))
             .collect::<Vec<&str>>();
-        Ok(lines
-            .first()
-            .context("Package Info not found")?
-            .replace('\t', "\n"))
+        let info = if lines.is_empty() {
+            response
+        } else {
+            lines.first().context("Package Info not found")?.to_string()
+        };
+        Ok(info.replace('\t', "\n"))
     }
     fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
