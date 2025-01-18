@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rayon::prelude::*;
+use regex::Regex;
 use secstr::SecVec;
 
 use crate::backend::{
@@ -86,8 +87,20 @@ impl ProviderActions for Flatpak {
         Ok(())
     }
     fn package_info(&self, package: String) -> Result<String> {
-        let response = command::run(&format!("flatpak search {}", package))?;
-        Ok(response.replace('\t', "\n"))
+        let split = package.split(' ').collect::<Vec<&str>>();
+        let remote = split[0];
+        let package_name = split[1];
+        let re = format!("[^-](\\b{}\\b)([^-]|$)", remote);
+        let regex = Regex::new(&re).expect("Invalid regex");
+        let response = command::run(&format!("flatpak search {}", package_name))?;
+        let lines = response
+            .split('\n')
+            .filter(|value| regex.is_match(value))
+            .collect::<Vec<&str>>();
+        Ok(lines
+            .first()
+            .context("Package Info not found")?
+            .replace('\t', "\n"))
     }
     fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
