@@ -1,32 +1,30 @@
 mod imp;
 
-use std::cell::Ref;
-use std::thread::spawn;
-
-use adw::subclass::prelude::*;
-use anyhow::{anyhow, Context, Result};
+use adw::{prelude::*, subclass::prelude::*};
 use async_channel::unbounded;
-use glib::{clone, Object};
 use gtk::{
-    gio, glib,
-    prelude::{
-        ButtonExt, Cast, CastNone, EditableExt, SelectionModelExt, StaticType, TextBufferExt,
-        TextViewExt, WidgetExt,
-    },
+    gio,
+    glib::{self, clone, GString, Object},
 };
+use std::{
+    cell::{Ref, RefMut},
+    thread::spawn,
+};
+
+use anyhow::{anyhow, Context, Result};
 use rust_fuzzy_search::fuzzy_compare;
 use secstr::{SecStr, SecVec};
 
-use crate::backend::command::CommandStream;
 use crate::{
     application,
+    backend::{command::CommandStream, settings},
     backend::{package_object::PackageObject, provider::ProviderKind},
     messagebox,
 };
 
 glib::wrapper! {
     pub struct Window(ObjectSubclass<imp::Window>)
-        @extends gtk::Application, gtk::Window, gtk::Widget, adw::Application,
+        @extends adw::ApplicationWindow, gtk::ApplicationWindow, gtk::Window, gtk::Widget,
         @implements gio::ActionGroup, gio::ActionMap, gtk::Accessible, gtk::Buildable,
                     gtk::ConstraintTarget, gtk::Native, gtk::Root, gtk::ShortcutManager;
 }
@@ -317,16 +315,13 @@ impl Window {
 
         obj.single_selection.unselect_all();
         let value = search.text();
-        let filter = gtk::CustomFilter::new(move |obj| {
-            if value.is_empty() {
-                true
-            } else if let Some(obj) = obj.downcast_ref::<PackageObject>() {
-                let prec = fuzzy_compare(&obj.qualifiedName(), &value);
-                prec > 0.11
-            } else {
-                false
-            }
-        });
+        let use_fuzzy = settings::get()?.fuzzy_search;
+
+        let filter = if use_fuzzy {
+            fuzzy_search(value)
+        } else {
+            simple_search(value)
+        };
         obj.filter_list.set_filter(Some(&filter));
         Ok(())
     }
@@ -468,5 +463,31 @@ fn sorter_installed_package() -> gtk::CustomSorter {
         let bool_2 = package_2.installed();
 
         bool_2.cmp(&bool_1).into()
+    })
+}
+
+fn fuzzy_search(value: GString) -> gtk::CustomFilter {
+    gtk::CustomFilter::new(move |obj| {
+        if value.is_empty() {
+            true
+        } else if let Some(obj) = obj.downcast_ref::<PackageObject>() {
+            let prec = fuzzy_compare(&obj.qualifiedName(), &value);
+            prec > 0.115
+        } else {
+            false
+        }
+    })
+}
+
+fn simple_search(value: GString) -> gtk::CustomFilter {
+    let value = value.to_ascii_lowercase();
+    gtk::CustomFilter::new(move |obj| {
+        if value.is_empty() {
+            true
+        } else if let Some(obj) = obj.downcast_ref::<PackageObject>() {
+            obj.qualifiedName().contains(&value)
+        } else {
+            false
+        }
     })
 }

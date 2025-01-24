@@ -4,6 +4,7 @@ use glib::clone;
 use gtk::prelude::*;
 use gtk::{gio, glib};
 
+use crate::backend::settings;
 use crate::constants;
 mod imp;
 
@@ -42,6 +43,28 @@ impl PackageManagerApplication {
             }
         ));
         self.add_action(&about_action);
+
+        let initial_state = if let Ok(value) = settings::get() {
+            value.fuzzy_search
+        } else {
+            false
+        };
+        let search_type_action = gio::SimpleAction::new_stateful(
+            "search-type",
+            None,
+            &glib::Variant::from(initial_state),
+        );
+        search_type_action.connect_change_state(move |action, value| {
+            let new_value = value.unwrap();
+            let bool_value = new_value.get::<bool>().unwrap();
+
+            if let Ok(mut value) = settings::get() {
+                let _ = value.set_bool("fuzzy_search", bool_value);
+            }
+
+            action.set_state(new_value);
+        });
+        self.add_action(&search_type_action);
     }
 
     fn show_about(&self) -> Result<()> {

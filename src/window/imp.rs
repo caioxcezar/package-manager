@@ -4,11 +4,7 @@ use crate::{
 };
 use adw::subclass::prelude::*;
 use glib::subclass::InitializingObject;
-use gtk::{
-    glib::{self, clone},
-    prelude::*,
-    CompositeTemplate,
-};
+use gtk::{glib, prelude::*, CompositeTemplate};
 use secstr::SecVec;
 use std::cell::RefCell;
 #[derive(CompositeTemplate, Default)]
@@ -86,11 +82,12 @@ impl ObjectImpl for Window {
             messagebox::alert("Error while opening", &format!("{err:?}"), &obj);
         }
 
-        glib::source::idle_add_local_once(clone!(
+        glib::source::idle_add_local_once(glib::clone!(
             #[weak(rename_to = window)]
             self,
             move || {
                 let obj = window.obj();
+
                 obj.setup_sorter();
                 obj.setup_signals();
                 obj.setup_data();
