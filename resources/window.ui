@@ -220,6 +220,10 @@
         <attribute name="action">win.show-help-overlay</attribute>
       </item>
       <item>
+        <attribute name="label" translatable="yes">_Use Fuzzy Search</attribute>
+        <attribute name="action">app.search-type</attribute>
+      </item>
+      <item>
         <attribute name="label" translatable="yes">_About Package Manager</attribute>
         <attribute name="action">app.about</attribute>
       </item>
