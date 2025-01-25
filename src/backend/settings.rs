@@ -44,7 +44,11 @@ pub fn open_file(path: PathBuf) -> Result<fs::File> {
 }
 
 pub fn get() -> Result<Settings> {
-    let file = open_file(settings_path().expect("Failed to get settings path"))?;
+    let path = settings_path()?;
+    if !fs::exists(&path).unwrap_or(true) {
+        Settings::default().update_json()?;
+    }
+    let file = open_file(path)?;
     let settings = serde_json::from_reader(file).expect("Failed to read settings file");
     Ok(settings)
 }
