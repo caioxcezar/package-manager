@@ -7,7 +7,7 @@ use gtk::{
     glib::{self, clone, GString, Object},
 };
 use std::{
-    cell::{Ref, RefMut},
+    cell::Ref,
     thread::spawn,
 };
 
