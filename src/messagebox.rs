@@ -71,13 +71,9 @@ pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {
     dialog.set_visible(true);
 
     let response = receiver.recv().await;
-    let _ = match response {
-        Ok(value) => value,
-        Err(err) => {
-            println!("{:?}", err);
-            return None;
-        }
-    };
+    if !response.unwrap_or(false) {
+        return None;
+    }
 
     let pass = password.text().to_string();
     let check_password = command::run(&format!("echo '{}' | sudo -S su", &pass));
