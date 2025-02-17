@@ -116,14 +116,18 @@ impl ProviderActions for ProtonGE {
         CommandStream::new("echo Removed. ".to_string(), None)
     }
     fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
-        let pkg = if self.packages.is_empty() {
-            ProtonGE::new()?.packages[0].clone()
+        let pkgs = if self.packages.is_empty() {
+            &ProtonGE::new()?.packages
         } else {
-            self.packages[0].clone()
+            &self.packages
         };
 
-        if !pkg.installed {
-            self.download(&pkg.name)
+        if pkgs.is_empty() {
+            return Err(anyhow!("Unable to find packages"));
+        }
+
+        if !pkgs[0].installed {
+            self.download(&pkgs[0].name)
         } else {
             CommandStream::new("echo Nothing to do. ".to_string(), None)
         }
