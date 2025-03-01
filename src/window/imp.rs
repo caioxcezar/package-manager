@@ -29,6 +29,8 @@ pub struct Window {
     #[template_child]
     pub text_command: TemplateChild<gtk::TextView>,
     #[template_child]
+    pub text_command_buffer: TemplateChild<gtk::TextBuffer>,
+    #[template_child]
     pub info_bar: TemplateChild<gtk::Overlay>,
     #[template_child]
     pub info_bar_label: TemplateChild<gtk::Label>,
