@@ -6,10 +6,7 @@ use gtk::{
     gio,
     glib::{self, clone, GString, Object},
 };
-use std::{
-    cell::Ref,
-    thread::spawn,
-};
+use std::{cell::Ref, thread::spawn};
 
 use anyhow::{anyhow, Context, Result};
 use rust_fuzzy_search::fuzzy_compare;
@@ -194,8 +191,12 @@ impl Window {
         let providers = obj.providers.borrow().clone();
         let count = providers.len();
         for (index, provider) in providers.iter().enumerate() {
+            obj.text_command_buffer.insert(
+                &mut obj.text_command_buffer.end_iter(),
+                &format!("\n::: {} :::\n", provider.name()),
+            );
             let stream = provider.update(password.clone())?;
-            let join_handle = self.write_command_page(index == count - 1, stream);
+            let join_handle = self.write_command_page(index == 0, index == count - 1, stream);
             let _ = join_handle.await;
         }
 
@@ -281,7 +282,7 @@ impl Window {
             _ => Err(anyhow!("Invalid Action. ")),
         }?;
 
-        let _ = self.write_command_page(true, stream);
+        let _ = self.write_command_page(true, true, stream);
 
         Ok(())
     }
@@ -292,7 +293,7 @@ impl Window {
         self.goto_command()?;
 
         let stream = self.provider().update(Some(password))?;
-        let _ = self.write_command_page(true, stream);
+        let _ = self.write_command_page(true, true, stream);
 
         Ok(())
     }
@@ -335,22 +336,20 @@ impl Window {
         provider.update_packages()
     }
 
-    fn write_command_page(&self, finish: bool, mut stream: CommandStream) -> glib::JoinHandle<()> {
+    fn write_command_page(
+        &self,
+        clean: bool,
+        finish: bool,
+        mut stream: CommandStream,
+    ) -> glib::JoinHandle<()> {
         let (sender, receiver) = unbounded();
         let obj = self.imp();
 
-        let buffer = gtk::TextBuffer::builder().text("").build();
-        obj.text_command.set_buffer(Some(&buffer));
-        let _ = buffer.connect_changed(clone!(
-            #[weak(rename_to = text_command)]
-            obj.text_command,
-            move |buff| {
-                let mut end = buff.end_iter();
-                text_command.scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
-            }
-        ));
-
-        obj.text_command.set_buffer(Some(&buffer));
+        if clean {
+            let mut start = obj.text_command_buffer.start_iter();
+            let mut end = obj.text_command_buffer.end_iter();
+            obj.text_command_buffer.delete(&mut start, &mut end);
+        }
 
         spawn(move || {
             while let Some(value) = stream.next() {
@@ -368,7 +367,12 @@ impl Window {
             self,
             async move {
                 while let Ok(result) = receiver.recv().await {
-                    buffer.insert(&mut buffer.end_iter(), &format!("{result}\n"));
+                    let obj = window.imp();
+
+                    obj.text_command_buffer.insert(
+                        &mut obj.text_command_buffer.end_iter(),
+                        &format!("{result}\n"),
+                    );
                 }
                 if !finish {
                     return;

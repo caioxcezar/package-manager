@@ -204,6 +204,11 @@
                         <property name="right-margin">5</property>
                         <property name="top-margin">5</property>
                         <property name="bottom-margin">5</property>
+                        <property name="buffer">
+                          <object class="GtkTextBuffer" id="text_command_buffer">
+                            <property name="text"></property>
+                          </object>
+                        </property>
                       </object>
                     </child>
                   </object>
