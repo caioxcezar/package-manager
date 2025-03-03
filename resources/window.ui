@@ -207,6 +207,7 @@
                         <property name="buffer">
                           <object class="GtkTextBuffer" id="text_command_buffer">
                             <property name="text"></property>
+                              <signal name="changed" handler="handle_buffer_changed" swapped="true"/>
                           </object>
                         </property>
                       </object>

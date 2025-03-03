@@ -151,6 +151,12 @@ impl Window {
     fn handle_focused(&self) {
         self.dropdown_provider.set_selected(0);
     }
+    #[template_callback]
+    fn handle_buffer_changed(&self, _buffer: gtk::TextBuffer) {
+        let mut end = self.text_command_buffer.end_iter();
+        self.text_command
+            .scroll_to_iter(&mut end, 0.0, false, 0.0, 0.0);
+    }
 }
 
 fn signal_text_bind_handler(item: gtk::ListItem, value: String) {
