@@ -265,12 +265,10 @@ impl Window {
             .selected_item()
             .and_downcast::<PackageObject>()
             .context("Failed to get item")?;
-        let buffer = gtk::TextBuffer::builder().text("").build();
         let action = obj
             .action
             .label()
             .context("Unable to identify the action (Install or Remove)")?;
-        obj.text_command.set_buffer(Some(&buffer));
         let password = self.password().await.context("Failed to get password")?;
         self.goto_command()?;
 
