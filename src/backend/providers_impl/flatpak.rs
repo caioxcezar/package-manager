@@ -48,13 +48,13 @@ impl ProviderActions for Flatpak {
     fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
 
-        let packages = command::run("flatpak list")?;
+        let packages = command::run("flatpak list --columns=origin,application")?;
         let installed_packages = packages
             .split('\n')
             .filter_map(|e| {
                 let columns = e.split('\t').collect::<Vec<&str>>();
                 if columns.len().gt(&1) {
-                    Some(format!("{} {}", columns[4], columns[1]))
+                    Some(format!("{} {}", columns[0], columns[1]))
                 } else {
                     None
                 }
