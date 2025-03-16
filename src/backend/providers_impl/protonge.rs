@@ -116,18 +116,12 @@ impl ProviderActions for ProtonGE {
         CommandStream::new("echo Removed. ".to_string(), None)
     }
     fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
-        let pkgs = if self.packages.is_empty() {
-            &ProtonGE::new()?.packages
-        } else {
-            &self.packages
-        };
-
-        if pkgs.is_empty() {
-            return Err(anyhow!("Unable to find packages"));
+        if self.packages.is_empty() {
+            return standalone_upate();
         }
 
-        if !pkgs[0].installed {
-            self.download(&pkgs[0].name)
+        if !self.packages[0].installed {
+            self.download(&self.packages[0].name)
         } else {
             CommandStream::new("echo Nothing to do. ".to_string(), None)
         }
@@ -238,4 +232,9 @@ fn filter_dir(dir: Result<DirEntry, std::io::Error>) -> Result<String> {
     } else {
         Err(anyhow!("Not a Folder"))
     }
+}
+
+fn standalone_upate()  -> Result<CommandStream> {
+    let instance = ProtonGE::new()?;
+    instance.update(None)
 }
