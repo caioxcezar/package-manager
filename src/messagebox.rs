@@ -4,7 +4,6 @@ use gtk::glib;
 use gtk::{prelude::*, AlertDialog};
 use secstr::{SecStr, SecVec};
 
-use crate::backend::command::CommandStream;
 use crate::{backend::command, window::Window};
 
 pub fn alert(title: &str, body: &str, window: &Window) {
@@ -78,8 +77,10 @@ pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {
 
     let pass = password.text().to_string();
 
-    let check_password =
-        CommandStream::new("sudo -S su".to_string(), Some([pass.clone()].to_vec()));
+    let check_password = command::run(&format!(
+        "echo \"{}\" | su -c \"true\" root 2>/dev/null",
+        password.text().to_string()
+    ));
 
     dialog.close();
     let res = match check_password {
@@ -87,7 +88,7 @@ pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {
         Err(err) => {
             alert(
                 "Wrong Password",
-                &format!("Please provide the currect password\n.{:?}", err),
+                &format!("Please provide the currect password.\n{:?}", err),
                 &window,
             );
             return None;
