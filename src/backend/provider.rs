@@ -1,5 +1,5 @@
 use super::{
-    command::CommandStream,
+    command::{self, CommandStream},
     package_object::PackageData,
     providers_impl::{
         dnf::Dnf, flatpak::Flatpak, pacman::Pacman, paru::Paru, protonge::ProtonGE, winget::Winget,
@@ -55,12 +55,15 @@ impl ProviderKind {
         self.as_provider_actions().package_info(package_name)
     }
     pub fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
+        let _ = command::run("sudo -k");
         self.as_provider_actions().update(password)
     }
     pub fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        let _ = command::run("sudo -k");
         self.as_provider_actions().install(password, package)
     }
     pub fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
+        let _ = command::run("sudo -k");
         self.as_provider_actions().remove(password, package)
     }
     pub fn update_packages(&mut self) -> Result<()> {
