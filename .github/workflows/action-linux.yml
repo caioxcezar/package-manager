@@ -18,6 +18,7 @@ jobs:
 
       - name: install dependencies
         run: |
+          sudo apt update
           sudo apt install libgtk-4-dev build-essential libadwaita-1-dev
 
       - name: set up Rust
