@@ -1,0 +1,48 @@
+name: Rust Build and Release (Linux)
+
+on:
+  push:
+    branches:
+      - dev
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: version
+        run: grep '^version' Cargo.toml | head -n 1 | sed 's/version *= *"\(.*\)"/\1/' >> $ENV:GITHUB_OUTPUT
+        id: version
+
+      - name: install dependencies
+        run: |
+          sudo apt install libgtk-4-dev build-essential libadwaita-1-dev
+
+      - name: set up Rust
+        uses: actions-rs/toolchain@v1
+
+      - name: build project
+        run: cargo build --release
+
+      - name: create release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          release_name: ${{ steps.version.outputs.version }} (Linux)
+          draft: true
+          prerelease: false
+
+      - name: upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: target/release/package-manager
+          asset_name: package-manager
+          asset_content_type: application/octet-stream
