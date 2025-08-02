@@ -1,0 +1,82 @@
+name: Rust Build and Release (Windows)
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: version
+        run: echo "version=$((Get-Content -Path .\Cargo.toml | Select-Object -Index 2) -replace '[^0-9.]')" >> $ENV:GITHUB_OUTPUT
+        id: version
+
+      - name: set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable-msvc
+
+      - name: prerequisites gvsbuild
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+          choco install git -y
+          choco install msys2 -y
+          choco install visualstudio2022-workload-vctools -y
+          choco install python312 -y
+          choco install nsis -y
+
+      - name: install gvsbuild
+        run: |
+          py -3.12 -m pip install --user pipx
+          py -3.12 -m pipx ensurepath
+          pipx install gvsbuild
+
+      - name: build gtk 4
+        run: gvsbuild build gtk4
+
+      - name: build Libadwaita
+        run: gvsbuild build libadwaita librsvg
+
+      - name: cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\Users\runneradmin\.cargo\registry
+            C:\Users\runneradmin\.cargo\git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-
+
+      - name: build project
+        run: |
+          $Env:PKG_CONFIG_PATH = "C:\gtk-build\gtk\x64\release\lib\pkgconfig"
+          $env:Path = "C:\gtk-build\gtk\x64\release\bin;" + $env:Path
+          $env:LIB = "C:\gtk-build\gtk\x64\release\lib;" + $env:LIB
+          cargo rustc --release -- -C link-args=-mwindows
+
+      - name: move exe to bin folder
+        run: Copy-Item -Path target/release/game-translator.exe -Destination "C:\gtk-build\gtk\x64\release\bin"
+
+      - name: compile installer with NSIS
+        run: makensis installer.nsi
+
+      - name: release with asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
+          draft: true
+          prerelease: false
+          files: installer.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
