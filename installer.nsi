@@ -5,7 +5,7 @@ RequestExecutionLevel admin
 SetCompress auto
 SetCompressor lzma
 
-!define VERSION "1.11.2"
+!define VERSION "1.11.3"
 
 Page directory
 Page instfiles
