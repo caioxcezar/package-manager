@@ -67,6 +67,19 @@ jobs:
       - name: move exe to bin folder
         run: Copy-Item -Path target/release/game-translator.exe -Destination "C:\gtk-build\gtk\x64\release\bin"
 
+      - name: Install ShellLink plugin for NSIS
+        run: |
+          # Download ShellLink.dll from NSIS GitHub
+          $shellLinkUrl = "https://github.com/NSIS-Dev/ShellLink-plugin/releases/latest/download/ShellLink.zip"
+          $tempDir = "$env:TEMP\ShellLink"
+          New-Item -ItemType Directory -Path $tempDir -Force
+          Invoke-WebRequest -Uri $shellLinkUrl -OutFile "$tempDir\ShellLink.zip"
+          Expand-Archive -Path "$tempDir\ShellLink.zip" -DestinationPath "$tempDir"
+
+          # Copy ShellLink.dll to NSIS plugins directory
+          $nsisPluginsDir = "C:\Program Files (x86)\NSIS\Plugins\x86-ansi"
+          Copy-Item -Path "$tempDir\ShellLink.dll" -Destination $nsisPluginsDir -Force
+
       - name: compile installer with NSIS
         run: makensis installer.nsi
 
