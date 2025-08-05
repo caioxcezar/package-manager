@@ -4,8 +4,17 @@ use std::process::{Child, ChildStdout, Command, Stdio};
 
 fn build_command(command: &str) -> Result<Command> {
     let cmd = if cfg!(windows) {
+        use std::os::windows::process::CommandExt;
+
         let mut cmd = Command::new("powershell");
-        cmd.args(["-c", command]);
+        cmd.args([
+            "-NoLogo",
+            "-NonInteractive",
+            "-NoProfile",
+            "-Command",
+            command,
+        ]);
+        cmd.creation_flags(0x08000000);
         cmd
     } else {
         let mut cmd = Command::new("sh");

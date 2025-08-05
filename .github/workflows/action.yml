@@ -69,16 +69,12 @@ jobs:
 
       - name: Install ShellLink plugin for NSIS
         run: |
-          # Download ShellLink.dll from NSIS GitHub
-          $shellLinkUrl = "https://github.com/NSIS-Dev/ShellLink-plugin/releases/latest/download/ShellLink.zip"
           $tempDir = "$env:TEMP\ShellLink"
           New-Item -ItemType Directory -Path $tempDir -Force
-          Invoke-WebRequest -Uri $shellLinkUrl -OutFile "$tempDir\ShellLink.zip"
-          Expand-Archive -Path "$tempDir\ShellLink.zip" -DestinationPath "$tempDir"
-
-          # Copy ShellLink.dll to NSIS plugins directory
-          $nsisPluginsDir = "C:\Program Files (x86)\NSIS\Plugins\x86-ansi"
-          Copy-Item -Path "$tempDir\ShellLink.dll" -Destination $nsisPluginsDir -Force
+          curl.exe -L -o "$tempDir\ShellLink.zip" "https://nsis.sourceforge.io/mediawiki/images/6/6c/Shelllink.zip"
+          tar -xf "$tempDir\ShellLink.zip" -C "$tempDir"
+          Copy-Item -Path "$tempDir\Plugins\ShellLink.dll" -Destination "C:\Program Files (x86)\NSIS\Plugins\x86-ansi" -Force
+          Copy-Item -Path "$tempDir\Unicode\Plugins\ShellLink.dll" -Destination "C:\Program Files (x86)\NSIS\Plugins\x86-unicode" -Force
 
       - name: compile installer with NSIS
         run: makensis installer.nsi
