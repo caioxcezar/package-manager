@@ -1,13 +1,14 @@
 use anyhow::{Context, Result};
 use rayon::prelude::*;
-use regex::Regex;
+use rusqlite::Connection;
 use secstr::SecVec;
+use serde::{Deserialize, Serialize};
 
 use crate::backend::{
     command::{self, CommandStream},
     package_object::PackageData,
     provider::ProviderActions,
-    utils::split_utf8,
+    utils,
 };
 
 #[derive(Clone, Debug)]
@@ -17,6 +18,38 @@ pub struct Winget {
     installed: usize,
     total: usize,
     root_required: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct WingetJson {
+    #[serde(rename = "Sources")]
+    sources: Vec<SourceJson>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SourceJson {
+    #[serde(rename = "Packages")]
+    packages: Vec<PackageJson>,
+    #[serde(rename = "SourceDetails")]
+    source_details: SourceDetailsJson,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SourceDetailsJson {
+    #[serde(rename = "Argument")]
+    argument: String,
+    #[serde(rename = "Identifier")]
+    identifier: String,
+    #[serde(rename = "Name")]
+    name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+struct PackageJson {
+    #[serde(rename = "PackageIdentifier")]
+    package_identifier: String,
+    #[serde(rename = "Version")]
+    version: String,
 }
 
 impl Default for Winget {
@@ -49,90 +82,49 @@ impl ProviderActions for Winget {
     }
     fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
-        let regex = Regex::new(r"[^\x00-\x7F]").context("Failed to create Regex")?;
-        let packages = command::run("winget list --verbose")?;
 
-        let name = packages.find("Name").context("Failed to find name index")?;
-        let id = packages.find("Id").context("Failed to find id index")? - name;
-        let version = packages
-            .find("Version")
-            .context("Failed to find version index")?
-            - name;
-        let source = packages
-            .find("Source")
-            .context("Failed to find source index")?
-            - name;
+        let mut path = utils::system_path()?;
+        path.push("winget_installed.json");
 
-        let packages: Vec<&str> = packages.split('\n').collect();
-        let installed_packages: Vec<PackageData> = packages
-            .par_iter()
-            .filter_map(|package| {
-                if package.contains("Name") || package.contains("-----") || package.len() < source {
-                    return None;
-                }
-                let name = split_utf8(package, 0, id);
-                if regex.is_match(&name) {
-                    return None;
-                }
-                let repository = if package[source..].trim() == "" {
-                    "local"
-                } else {
-                    &package[source..]
-                };
+        command::run(&format!(
+            "winget export --include-versions --nowarn -o {}",
+            path.to_str().context("Unable to get path")?
+        ))?;
+        let file = utils::open_file(path)?;
+        let winget_json: WingetJson = serde_json::from_reader(file)?;
 
-                Some(PackageData {
-                    repository: repository.to_owned(),
-                    name,
-                    qualified_name: split_utf8(package, id, version),
-                    version: split_utf8(package, version, source),
+        let mut installed_packages: Vec<PackageData> = Vec::new();
+        for source in winget_json.sources {
+            let mut packages: Vec<PackageData> = source
+                .packages
+                .par_iter()
+                .map(|pkg| PackageData {
+                    name: "".to_string(),
+                    repository: source.source_details.name.clone(),
+                    qualified_name: pkg.package_identifier.clone(),
+                    version: pkg.version.clone(),
                     installed: true,
                 })
-            })
-            .collect();
+                .collect();
 
-        let packages = command::run("winget search -q `\"`\" --verbose")?;
+            installed_packages.append(&mut packages);
+        }
 
-        let name = packages.find("Name").context("Failed to find name")?;
-        let id = packages.find("Id").context("Failed to find id")? - name;
-        let version = packages.find("Version").context("Failed to find version")? - name;
-        let _match = packages.find("Match").context("Failed to find match")? - name;
-        let source = packages.find("Source").context("Failed to find source")? - name;
-
-        let packages: Vec<&str> = packages.split('\n').collect();
-        self.packages = packages
-            .par_iter()
-            .filter_map(|package| {
-                if package.contains("Name") || package.contains("-----") || package.len() < source {
-                    return None;
-                }
-                let name = split_utf8(package, 0, id);
-                if regex.is_match(&name) {
-                    return None;
-                }
-                Some(PackageData {
-                    repository: package[source..].to_owned(),
-                    name,
-                    qualified_name: split_utf8(package, id, version),
-                    version: split_utf8(package, version, _match),
-                    installed: installed_packages
-                        .par_iter()
-                        .any(|f| f.qualified_name == split_utf8(package, id, version)),
-                })
-            })
-            .collect();
+        update_db()?;
+        self.packages = list_db(&installed_packages)?;
 
         self.installed = installed_packages.len();
         self.total = self.packages.len();
         Ok(())
     }
     fn package_info(&self, package: String) -> Result<String> {
-        command::run(&format!("winget show {}", package))
+        command::run(&format!("winget show {package}"))
     }
     fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("winget install {}", package), None)
+        CommandStream::new(format!("winget install {package}"), None)
     }
     fn remove(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("winget uninstall {}", package), None)
+        CommandStream::new(format!("winget uninstall {package}"), None)
     }
     fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
         CommandStream::new("winget upgrade -h --all".to_owned(), None)
@@ -141,4 +133,65 @@ impl ProviderActions for Winget {
         let packages = command::run("winget --version");
         packages.is_ok()
     }
+}
+
+fn update_db() -> Result<()> {
+    let response = reqwest::blocking::get("https://cdn.winget.microsoft.com/cache/source.msix")?;
+    let bytes = response.bytes()?;
+    let mut zip = zip::ZipArchive::new(std::io::Cursor::new(bytes))?;
+
+    for i in 0..zip.len() {
+        let mut file = zip.by_index(i)?;
+        let name = file.name();
+
+        if name == "Public/index.db" {
+            let mut path = utils::system_path()?;
+            path.push("index.db");
+
+            let mut out_file = std::fs::File::create(path.to_str().context("Unable to get path")?)?;
+            std::io::copy(&mut file, &mut out_file)?;
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn list_db(installed_packages: &Vec<PackageData>) -> Result<Vec<PackageData>> {
+    let mut path = utils::system_path()?;
+    path.push("index.db");
+
+    let conn = Connection::open(path.to_str().context("Unable to get path")?)?;
+    let mut stmt = conn.prepare(
+        "
+            SELECT ids.id, names.name, versions.version
+            FROM manifest
+            INNER JOIN names
+                ON manifest.name = names.rowid
+            INNER JOIN ids
+                ON manifest.id = ids.rowid
+            INNER JOIN versions
+                ON versions.rowid = manifest.version
+            GROUP BY ids.id
+            HAVING MAX(manifest.version) = manifest.version",
+    )?;
+    let result = stmt
+        .query_map([], |row| {
+            let qualified_name: String = row.get(0)?;
+            let name = row.get(1)?;
+            let version = row.get(2)?;
+
+            Ok(PackageData {
+                repository: "winget".to_string(),
+                qualified_name: qualified_name.clone(),
+                name,
+                version,
+                installed: installed_packages
+                    .par_iter()
+                    .any(|f| f.qualified_name == qualified_name),
+            })
+        })?
+        .map(|result| result.map_err(anyhow::Error::new))
+        .collect();
+
+    result
 }

@@ -1,9 +1,8 @@
 use anyhow::Result;
-use gtk::glib;
 use serde::{Deserialize, Serialize};
 use std::{fs, path::PathBuf};
 
-use crate::constants::APP_ID;
+use crate::backend::utils;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Settings {
@@ -31,16 +30,9 @@ impl Settings {
 }
 
 pub fn settings_path() -> Result<PathBuf> {
-    let mut path = glib::user_data_dir();
-    path.push(APP_ID);
-    std::fs::create_dir_all(&path)?;
+    let mut path = utils::system_path()?;
     path.push("setting.json");
     Ok(path)
-}
-
-pub fn open_file(path: PathBuf) -> Result<fs::File> {
-    let file = fs::File::open(path)?;
-    Ok(file)
 }
 
 pub fn get() -> Result<Settings> {
@@ -48,7 +40,7 @@ pub fn get() -> Result<Settings> {
     if !fs::exists(&path).unwrap_or(true) {
         Settings::default().update_json()?;
     }
-    let file = open_file(path)?;
+    let file = utils::open_file(path)?;
     let settings = serde_json::from_reader(file).expect("Failed to read settings file");
     Ok(settings)
 }

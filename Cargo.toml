@@ -1,13 +1,12 @@
 [package]
 name = "package-manager"
-version = "1.10.4"
+version = "1.11.0"
 edition = "2021"
 
 [dependencies]
 adw = { version = "0.7.1", package = "libadwaita", features = ["v1_6"] }
 gtk = { version = "0.9.5", package = "gtk4", features = ["v4_10"] }
 secstr = "0.5.0"
-gettext-rs = { version = "0.7", features = ["gettext-system"] }
 reqwest = { version = "0.12.12", features = ["blocking", "json"] }
 serde = { version = "1.0", features = ["derive"] }
 flate2 = "1.0"
@@ -21,6 +20,8 @@ features = "0.10.0"
 anyhow = "1.0.95"
 rust-fuzzy-search = "0.1.1"
 serde_json = "1.0.137"
+zip = "4.3.0"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
 
 [build-dependencies]
 glib-build-tools = "0.20.0"
