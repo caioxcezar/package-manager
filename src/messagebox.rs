@@ -79,7 +79,7 @@ pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {
 
     let check_password = command::run(&format!(
         "echo \"{}\" | su -c \"true\" root 2>/dev/null",
-        password.text().to_string()
+        password.text()
     ));
 
     dialog.close();
@@ -88,8 +88,8 @@ pub async fn ask_password(window: &Window) -> Option<SecVec<u8>> {
         Err(err) => {
             alert(
                 "Wrong Password",
-                &format!("Please provide the currect password.\n{:?}", err),
-                &window,
+                &format!("Please provide the currect password.\n{err:?}"),
+                window,
             );
             return None;
         }

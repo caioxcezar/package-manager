@@ -30,8 +30,7 @@ pub fn get_str(url: &str) -> Result<String> {
 
 pub fn download_and_extract(url: String, file_path: String) -> Result<CommandStream> {
     let command = format!(
-        "wget {} -O /tmp/proton-ge.tar.gz &> /dev/stdout && tar -xvzf /tmp/proton-ge.tar.gz -C {}",
-        url, file_path
+        "wget {url} -O /tmp/proton-ge.tar.gz &> /dev/stdout && tar -xvzf /tmp/proton-ge.tar.gz -C {file_path}"
     );
     CommandStream::new(command, None)
 }

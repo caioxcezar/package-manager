@@ -11,11 +11,8 @@ pub struct Settings {
 
 impl Settings {
     pub fn set_bool(&mut self, prop: &str, value: bool) -> Result<()> {
-        match prop {
-            "fuzzy_search" => {
-                self.fuzzy_search = value;
-            }
-            &_ => {}
+        if prop == "fuzzy_search" {
+            self.fuzzy_search = value
         }
         self.update_json()?;
         Ok(())

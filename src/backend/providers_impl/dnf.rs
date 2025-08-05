@@ -89,23 +89,23 @@ impl ProviderActions for Dnf {
         Ok(())
     }
     fn package_info(&self, package: String) -> Result<String> {
-        command::run(&format!("dnf info {}", package))
+        command::run(&format!("dnf info {package}"))
     }
     fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
-            format!("sudo -S dnf install {} -y", package),
+            format!("sudo -S dnf install {package} -y"),
             Some(pass_2_stdin(password)?),
         )
     }
     fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
-            format!("sudo -S dnf remove {} -y", package),
+            format!("sudo -S dnf remove {package} -y"),
             Some(pass_2_stdin(password)?),
         )
     }
     fn update(&self, password: Option<SecVec<u8>>) -> Result<CommandStream> {
         CommandStream::new(
-            format!("sudo -S dnf update -y"),
+            "sudo -S dnf update -y".to_string(),
             Some(pass_2_stdin(password)?),
         )
     }

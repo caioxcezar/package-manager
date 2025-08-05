@@ -5,11 +5,11 @@ use std::process::{Child, ChildStdout, Command, Stdio};
 fn build_command(command: &str) -> Result<Command> {
     let cmd = if cfg!(windows) {
         let mut cmd = Command::new("powershell");
-        cmd.args(["-c", &command]);
+        cmd.args(["-c", command]);
         cmd
     } else {
         let mut cmd = Command::new("sh");
-        cmd.args(["-c", &command]);
+        cmd.args(["-c", command]);
         cmd
     };
     Ok(cmd)
@@ -42,7 +42,7 @@ impl CommandStream {
         if let Some(inputs) = stdin {
             let mut stdin = child.stdin.take().context("Failed to run command")?;
             for input in inputs {
-                stdin.write_all(format!("{}\r\n", input).as_bytes())?;
+                stdin.write_all(format!("{input}\r\n").as_bytes())?;
             }
         }
 

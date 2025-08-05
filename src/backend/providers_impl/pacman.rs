@@ -71,17 +71,17 @@ impl ProviderActions for Pacman {
         Ok(())
     }
     fn package_info(&self, package: String) -> Result<String> {
-        command::run(&format!("pacman -Si {}", package))
+        command::run(&format!("pacman -Si {package}"))
     }
     fn install(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
-            format!("sudo -S pacman -Syu {} --noconfirm", package),
+            format!("sudo -S pacman -Syu {package} --noconfirm"),
             Some(pass_2_stdin(password)?),
         )
     }
     fn remove(&self, password: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
-            format!("sudo -S pacman -Runs {} --noconfirm", package),
+            format!("sudo -S pacman -Runs {package} --noconfirm"),
             Some(pass_2_stdin(password)?),
         )
     }

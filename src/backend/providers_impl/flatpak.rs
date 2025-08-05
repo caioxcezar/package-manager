@@ -90,9 +90,9 @@ impl ProviderActions for Flatpak {
         let split = package.split(' ').collect::<Vec<&str>>();
         let remote = split[0];
         let package_name = split[1];
-        let re = format!("[^-](\\b{}\\b)([^-]|$)", remote);
+        let re = format!("[^-](\\b{remote}\\b)([^-]|$)");
         let regex = Regex::new(&re).expect("Invalid regex");
-        let response = command::run(&format!("flatpak search {}", package_name))?;
+        let response = command::run(&format!("flatpak search {package_name}"))?;
         let lines = response
             .split('\n')
             .filter(|value| regex.is_match(value))
@@ -106,7 +106,7 @@ impl ProviderActions for Flatpak {
     }
     fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
-            format!("flatpak install {} -y --noninteractive", package),
+            format!("flatpak install {package} -y --noninteractive"),
             None,
         )
     }
@@ -114,7 +114,7 @@ impl ProviderActions for Flatpak {
         let idx_name = package.find(' ').context("Package name not found")?;
         let package_name = package[idx_name..].to_string();
         CommandStream::new(
-            format!("flatpak remove {} -y --noninteractive", package_name),
+            format!("flatpak remove {package_name} -y --noninteractive"),
             None,
         )
     }

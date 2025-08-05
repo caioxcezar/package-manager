@@ -13,33 +13,33 @@ use strum_macros::EnumIter;
 
 #[derive(Debug, EnumIter, Clone)]
 pub enum ProviderKind {
-    FLATPAK(Flatpak),
-    PACMAN(Pacman),
-    PARU(Paru),
-    PROTONGE(ProtonGE),
-    WINGET(Winget),
-    DNF(Dnf),
+    Flatpak(Flatpak),
+    Pacman(Pacman),
+    Paru(Paru),
+    ProtonGE(ProtonGE),
+    Winget(Winget),
+    Dnf(Dnf),
 }
 
 impl ProviderKind {
     fn as_provider_actions(&self) -> &dyn ProviderActions {
         match self {
-            ProviderKind::FLATPAK(provider) => provider,
-            ProviderKind::PACMAN(provider) => provider,
-            ProviderKind::PARU(provider) => provider,
-            ProviderKind::PROTONGE(provider) => provider,
-            ProviderKind::WINGET(provider) => provider,
-            ProviderKind::DNF(provider) => provider,
+            ProviderKind::Flatpak(provider) => provider,
+            ProviderKind::Pacman(provider) => provider,
+            ProviderKind::Paru(provider) => provider,
+            ProviderKind::ProtonGE(provider) => provider,
+            ProviderKind::Winget(provider) => provider,
+            ProviderKind::Dnf(provider) => provider,
         }
     }
     fn as_mut_provider_actions(&mut self) -> &mut dyn ProviderActions {
         match self {
-            ProviderKind::FLATPAK(provider) => provider,
-            ProviderKind::PACMAN(provider) => provider,
-            ProviderKind::PARU(provider) => provider,
-            ProviderKind::PROTONGE(provider) => provider,
-            ProviderKind::WINGET(provider) => provider,
-            ProviderKind::DNF(provider) => provider,
+            ProviderKind::Flatpak(provider) => provider,
+            ProviderKind::Pacman(provider) => provider,
+            ProviderKind::Paru(provider) => provider,
+            ProviderKind::ProtonGE(provider) => provider,
+            ProviderKind::Winget(provider) => provider,
+            ProviderKind::Dnf(provider) => provider,
         }
     }
     pub fn is_available(&self) -> bool {

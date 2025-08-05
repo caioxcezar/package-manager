@@ -179,7 +179,7 @@ impl Window {
             .any(|provider| provider.is_root_required());
 
         if some_root_required && password.is_none() {
-            password = messagebox::ask_password(&self).await;
+            password = messagebox::ask_password(self).await;
             obj.password.replace(password.clone());
             if password.is_none() {
                 return Err(anyhow!("Failed to get password"));
@@ -280,7 +280,7 @@ impl Window {
             _ => Err(anyhow!("Invalid Action. ")),
         }?;
 
-        let _ = self.write_command_page(true, true, stream);
+        self.write_command_page(true, true, stream);
 
         Ok(())
     }
@@ -291,7 +291,7 @@ impl Window {
         self.goto_command()?;
 
         let stream = self.provider().update(Some(password))?;
-        let _ = self.write_command_page(true, true, stream);
+        self.write_command_page(true, true, stream);
 
         Ok(())
     }
@@ -350,7 +350,7 @@ impl Window {
         }
 
         spawn(move || {
-            while let Some(value) = stream.next() {
+            for value in &mut stream {
                 let _ = sender.send_blocking(value);
             }
             let message = match stream.close() {
@@ -401,7 +401,7 @@ impl Window {
             .and_downcast::<gtk::StringObject>()
         {
             Some(value) => value.string().to_string(),
-            None => return "".to_string(),
+            None => "".to_string(),
         }
     }
 
@@ -411,10 +411,9 @@ impl Window {
         if password.is_some() {
             return password;
         }
-        let provider = self.provider();
-        let is_root_required = provider.is_root_required();
+        let is_root_required = self.provider().is_root_required();
         if is_root_required {
-            let password = messagebox::ask_password(&self).await;
+            let password = messagebox::ask_password(self).await;
             obj.password.replace(password.clone());
             password
         } else {

@@ -100,17 +100,14 @@ impl ProviderActions for ProtonGE {
             let name = entry
                 .file_name()
                 .to_str()
-                .context(format!(
-                    "Failed to get file name while removing {}",
-                    package
-                ))?
+                .context(format!("Failed to get file name while removing {package}"))?
                 .to_owned();
 
             if !name.contains(&pkg.version) {
                 continue;
             }
 
-            let _ = fs::remove_dir_all(format!("{}/{}", &proton_location, &name))?;
+            fs::remove_dir_all(format!("{proton_location}/{name}"))?;
         }
 
         CommandStream::new("echo Removed. ".to_string(), None)
@@ -162,7 +159,7 @@ impl ProtonGE {
                 let name = if name.contains("GE-Proton") {
                     package.tag_name.to_owned()
                 } else {
-                    format!("GE-Proton{}", name)
+                    format!("GE-Proton{name}")
                 };
                 let version = &name[9..];
                 PackageData {
@@ -192,7 +189,7 @@ impl ProtonGE {
         self.packages
             .par_iter()
             .find_any(|package| package.name.eq(name))
-            .context(format!("Package {} not found", name))
+            .context(format!("Package {name} not found"))
     }
     fn download(&self, package: &str) -> Result<CommandStream> {
         let mut url = Err(anyhow!("URL not found"));
@@ -234,7 +231,7 @@ fn filter_dir(dir: Result<DirEntry, std::io::Error>) -> Result<String> {
     }
 }
 
-fn standalone_upate()  -> Result<CommandStream> {
+fn standalone_upate() -> Result<CommandStream> {
     let instance = ProtonGE::new()?;
     instance.update(None)
 }

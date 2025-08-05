@@ -38,7 +38,7 @@ impl PackageManagerApplication {
             self,
             move |_, _| {
                 if let Err(msg) = app.show_about() {
-                    println!("{}", msg);
+                    println!("{msg}");
                 }
             }
         ));
