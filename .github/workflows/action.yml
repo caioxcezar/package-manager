@@ -65,7 +65,7 @@ jobs:
           cargo rustc --release -- -C link-args=-mwindows
 
       - name: move exe to bin folder
-        run: Copy-Item -Path target/release/game-translator.exe -Destination "C:\gtk-build\gtk\x64\release\bin"
+        run: Copy-Item -Path target/release/package-manager.exe -Destination "C:\gtk-build\gtk\x64\release\bin"
 
       - name: Install ShellLink plugin for NSIS
         run: |
