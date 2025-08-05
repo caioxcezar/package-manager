@@ -472,8 +472,8 @@ fn fuzzy_search(value: GString) -> gtk::CustomFilter {
         if value.is_empty() {
             true
         } else if let Some(obj) = obj.downcast_ref::<PackageObject>() {
-            let prec = fuzzy_compare(&obj.qualifiedName(), &value);
-            prec > 0.115
+            let prec = fuzzy_compare(&obj.qualifiedName().to_lowercase(), &value.to_lowercase());
+            prec >= 0.3
         } else {
             false
         }
@@ -486,7 +486,9 @@ fn simple_search(value: GString) -> gtk::CustomFilter {
         if value.is_empty() {
             true
         } else if let Some(obj) = obj.downcast_ref::<PackageObject>() {
-            obj.qualifiedName().contains(&value)
+            obj.qualifiedName()
+                .to_lowercase()
+                .contains(&value.to_lowercase())
         } else {
             false
         }
