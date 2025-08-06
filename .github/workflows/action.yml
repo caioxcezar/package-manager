@@ -62,7 +62,7 @@ jobs:
           $Env:PKG_CONFIG_PATH = "C:\gtk-build\gtk\x64\release\lib\pkgconfig"
           $env:Path = "C:\gtk-build\gtk\x64\release\bin;" + $env:Path
           $env:LIB = "C:\gtk-build\gtk\x64\release\lib;" + $env:LIB
-          cargo rustc --release -- -C link-args=-mwindows
+          cargo build --release
 
       - name: move exe to bin folder
         run: Copy-Item -Path target/release/package-manager.exe -Destination "C:\gtk-build\gtk\x64\release\bin"
