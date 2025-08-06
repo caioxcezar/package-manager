@@ -2,25 +2,26 @@ use anyhow::{anyhow, Context, Result};
 use std::io::{BufRead, BufReader, Lines, Read, Write};
 use std::process::{Child, ChildStdout, Command, Stdio};
 
+#[cfg(target_os = "linux")]
 fn build_command(command: &str) -> Result<Command> {
-    let cmd = if cfg!(windows) {
-        use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new("sh");
+    cmd.args(["-c", command]);
+    Ok(cmd)
+}
 
-        let mut cmd = Command::new("powershell");
-        cmd.args([
-            "-NoLogo",
-            "-NonInteractive",
-            "-NoProfile",
-            "-Command",
-            command,
-        ]);
-        cmd.creation_flags(0x08000000);
-        cmd
-    } else {
-        let mut cmd = Command::new("sh");
-        cmd.args(["-c", command]);
-        cmd
-    };
+#[cfg(target_os = "windows")]
+fn build_command(command: &str) -> Result<Command> {
+    use std::os::windows::process::CommandExt;
+
+    let mut cmd = Command::new("powershell");
+    cmd.args([
+        "-NoLogo",
+        "-NonInteractive",
+        "-NoProfile",
+        "-Command",
+        command,
+    ]);
+    cmd.creation_flags(0x08000000);
     Ok(cmd)
 }
 
