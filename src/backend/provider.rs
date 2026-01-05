@@ -1,3 +1,5 @@
+use crate::backend::providers_impl::soar::Soar;
+
 use super::{
     command::{self, CommandStream},
     package_object::PackageData,
@@ -19,6 +21,7 @@ pub enum ProviderKind {
     ProtonGE(ProtonGE),
     Winget(Winget),
     Dnf(Dnf),
+    Soar(Soar),
 }
 
 impl ProviderKind {
@@ -30,6 +33,7 @@ impl ProviderKind {
             ProviderKind::ProtonGE(provider) => provider,
             ProviderKind::Winget(provider) => provider,
             ProviderKind::Dnf(provider) => provider,
+            ProviderKind::Soar(provider) => provider,
         }
     }
     fn as_mut_provider_actions(&mut self) -> &mut dyn ProviderActions {
@@ -40,6 +44,7 @@ impl ProviderKind {
             ProviderKind::ProtonGE(provider) => provider,
             ProviderKind::Winget(provider) => provider,
             ProviderKind::Dnf(provider) => provider,
+            ProviderKind::Soar(provider) => provider,
         }
     }
     pub fn is_available(&self) -> bool {
