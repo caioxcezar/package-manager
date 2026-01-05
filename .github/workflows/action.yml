@@ -20,10 +20,11 @@ jobs:
         id: version
 
       - name: set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: stable-msvc
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+          components: rust-src, llvm-tools-preview
 
       - name: prerequisites gvsbuild
         run: |
@@ -43,7 +44,7 @@ jobs:
       - name: build gtk 4
         run: gvsbuild build gtk4
 
-      - name: build Libadwaita
+      - name: build Libadwaita and librsvg
         run: gvsbuild build libadwaita librsvg
 
       - name: cache cargo registry and build
@@ -53,7 +54,7 @@ jobs:
             C:\Users\runneradmin\.cargo\registry
             C:\Users\runneradmin\.cargo\git
             target
-          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}-${{ hashFiles('**/rust-toolchain') }}
           restore-keys: |
             cargo-${{ runner.os }}-
 
