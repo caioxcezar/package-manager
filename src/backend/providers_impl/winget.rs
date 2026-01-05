@@ -121,10 +121,11 @@ impl ProviderActions for Winget {
         command::run(&format!("winget show {package}"))
     }
     fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("winget install {package}"), None)
+        CommandStream::new(format!("winget install -e --id {package}"), None)
     }
     fn remove(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
-        CommandStream::new(format!("winget uninstall {package}"), None)
+        let pkg = get_package(&package)?;
+        CommandStream::new(format!("winget uninstall \"{}\"", pkg.name), None)
     }
     fn update(&self, _: Option<SecVec<u8>>) -> Result<CommandStream> {
         CommandStream::new("winget upgrade -h --all".to_owned(), None)
@@ -156,11 +157,53 @@ fn update_db() -> Result<()> {
     Ok(())
 }
 
-fn list_db(installed_packages: &Vec<PackageData>) -> Result<Vec<PackageData>> {
+fn connection() -> Result<Connection> {
     let mut path = utils::system_path()?;
     path.push("index.db");
-
     let conn = Connection::open(path.to_str().context("Unable to get path")?)?;
+    Ok(conn)
+}
+
+fn get_package(id: &str) -> Result<PackageData> {
+    let conn = connection()?;
+
+    let obj = conn.query_row(
+        "
+            SELECT ids.id, names.name, versions.version
+            FROM manifest
+            INNER JOIN names
+                ON manifest.name = names.rowid
+            INNER JOIN ids
+                ON manifest.id = ids.rowid
+            INNER JOIN versions
+                ON versions.rowid = manifest.version
+            WHERE ids.id = ?
+            GROUP BY ids.id
+            HAVING MAX(manifest.version) = manifest.version",
+        [id],
+        |row| {
+            let qualified_name: String = row.get(0)?;
+            let name = row.get(1)?;
+            let version = row.get(2)?;
+
+            let res = PackageData {
+                repository: "winget".to_string(),
+                qualified_name: qualified_name.clone(),
+                name,
+                version,
+                installed: false,
+            };
+
+            Ok(res)
+        },
+    )?;
+
+    Ok(obj)
+}
+
+fn list_db(installed_packages: &Vec<PackageData>) -> Result<Vec<PackageData>> {
+    let conn = connection()?;
+
     let mut stmt = conn.prepare(
         "
             SELECT ids.id, names.name, versions.version
