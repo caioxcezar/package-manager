@@ -10,9 +10,9 @@ mod window;
 
 use application::PackageManagerApplication;
 use gdk::Display;
-use gtk::{gdk, gio, prelude::*, CssProvider};
+use gtk::{gdk, gio, glib, prelude::*, CssProvider};
 
-fn main() {
+fn main() -> glib::ExitCode {
     // Register and include resources
     gio::resources_register_include!("package_manager.gresource")
         .expect("Failed to register resources.");
@@ -22,7 +22,7 @@ fn main() {
     app.connect_startup(|program| {
         load_css(program);
     });
-    std::process::exit(app.run().value());
+    app.run()
 }
 
 fn load_css(_program: &PackageManagerApplication) {

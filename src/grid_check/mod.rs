@@ -5,7 +5,8 @@ use gtk::subclass::prelude::*;
 
 glib::wrapper! {
     pub struct GridCheck(ObjectSubclass<imp::GridCheck>)
-        @extends gtk::Widget;
+        @extends gtk::Widget,
+        @implements gtk::ConstraintTarget, gtk::Accessible, gtk::Buildable;
 }
 
 impl Default for GridCheck {

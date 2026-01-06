@@ -4,7 +4,8 @@ use gtk::subclass::prelude::*;
 
 glib::wrapper! {
     pub struct GridText(ObjectSubclass<imp::GridText>)
-        @extends gtk::Widget;
+        @extends gtk::Widget,
+        @implements gtk::ConstraintTarget, gtk::Accessible, gtk::Buildable;
 }
 
 impl Default for GridText {
