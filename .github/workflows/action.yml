@@ -19,6 +19,14 @@ jobs:
         run: echo "version=$((Get-Content -Path .\Cargo.toml | Select-Object -Index 2) -replace '[^0-9.]')" >> $ENV:GITHUB_OUTPUT
         id: version
 
+      - name: set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          override: true
+          target: x86_64-pc-windows-msvc
+          components: rust-src, llvm-tools-preview
+
       - name: prerequisites gvsbuild
         run: |
           Set-ExecutionPolicy Bypass -Scope Process -Force; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
@@ -37,13 +45,11 @@ jobs:
       - name: build gtk 4
         run: gvsbuild build gtk4
 
-      - name: set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-          target: x86_64-pc-windows-msvc
-          components: rust-src, llvm-tools-preview
+      - name: Update Rust stable for gvsbuild
+        run: |
+          rustup update stable
+          rustup default stable
+          rustc --version
 
       - name: build Libadwaita and librsvg
         run: gvsbuild build libadwaita librsvg
