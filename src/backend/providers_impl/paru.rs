@@ -1,12 +1,21 @@
+use alpm::Alpm;
 use anyhow::Result;
-use rayon::prelude::*;
+use flate2::read::GzDecoder;
 use secstr::SecVec;
+use serde::Deserialize;
+use std::{
+    fs,
+    io::{BufReader, Read},
+    ops::Sub,
+    path::PathBuf,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
 use crate::backend::{
     command::{self, CommandStream},
     package_object::PackageData,
     provider::ProviderActions,
-    utils::pass_2_stdin,
+    utils::{self, pass_2_stdin},
 };
 #[derive(Clone, Debug)]
 pub struct Paru {
@@ -29,6 +38,13 @@ impl Default for Paru {
     }
 }
 
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+struct AurPackageShort {
+    name: String,
+    version: String,
+}
+
 impl ProviderActions for Paru {
     fn installed(&self) -> usize {
         self.installed
@@ -47,27 +63,21 @@ impl ProviderActions for Paru {
     }
     fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
-        let packages = command::run("paru -Sl")?;
-        let packages: Vec<&str> = packages.split('\n').collect();
 
-        self.packages = packages
-            .par_iter()
-            .filter_map(|package| {
-                let list_package: Vec<&str> = package.split(' ').collect();
-                if list_package.len() < 2 {
-                    return None;
-                }
-                Some(PackageData {
-                    repository: String::from(list_package[0]),
-                    name: String::from(list_package[1]),
-                    qualified_name: String::from(list_package[1]),
-                    version: String::from(list_package[2]),
-                    installed: list_package.len() == 4,
-                })
+        let handle = Alpm::new("/", "/var/lib/pacman")?;
+
+        self.packages = get_json_packages()?
+            .iter()
+            .map(|pkg| PackageData {
+                repository: "AUR".to_string(),
+                name: pkg.name.to_string(),
+                qualified_name: pkg.name.to_string(),
+                version: pkg.version.to_string(),
+                installed: handle.localdb().pkg(pkg.name.to_string()).is_ok(),
             })
             .collect();
 
-        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
+        self.installed = handle.localdb().pkgs().len();
         self.total = self.packages.len();
         Ok(())
     }
@@ -96,4 +106,41 @@ impl ProviderActions for Paru {
         let packages = command::run("paru --version");
         packages.is_ok()
     }
+}
+
+fn json_path() -> Result<PathBuf> {
+    let mut path = utils::system_path()?;
+    path.push("aur_packages.json");
+    Ok(path)
+}
+
+fn get_json_packages() -> Result<Vec<AurPackageShort>> {
+    let path = json_path()?;
+    let exists = fs::exists(&path)?;
+    if exists {
+        let created = fs::File::open(&path)?.metadata()?.created()?;
+        let yesterday = SystemTime::now().sub(Duration::from_hours(24));
+
+        if created > yesterday {
+            let file = fs::File::open(&path)?;
+            let reader = BufReader::new(file);
+            return Ok(serde_json::from_reader(reader)?);
+        }
+    }
+    download_json()
+}
+
+fn download_json() -> Result<Vec<AurPackageShort>> {
+    let response = reqwest::blocking::get("https://aur.archlinux.org/packages-meta-v1.json.gz")?;
+
+    let mut decoder = GzDecoder::new(response);
+    let mut json_string = String::new();
+    decoder.read_to_string(&mut json_string)?;
+
+    let list = serde_json::from_str::<Vec<AurPackageShort>>(&json_string)?;
+
+    let path = json_path()?;
+    fs::write(path, json_string)?;
+
+    Ok(list)
 }
