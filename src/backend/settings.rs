@@ -1,6 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::PathBuf};
+use std::{fs, io::BufReader, path::PathBuf};
 
 use crate::backend::utils;
 
@@ -38,6 +38,7 @@ pub fn get() -> Result<Settings> {
         Settings::default().update_json()?;
     }
     let file = utils::open_file(path)?;
-    let settings = serde_json::from_reader(file).expect("Failed to read settings file");
+    let reader = BufReader::new(file);
+    let settings = serde_json::from_reader(reader).expect("Failed to read settings file");
     Ok(settings)
 }

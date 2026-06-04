@@ -1,3 +1,5 @@
+use std::io::BufReader;
+
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use rusqlite::Connection;
@@ -91,7 +93,8 @@ impl ProviderActions for Winget {
             path.to_str().context("Unable to get path")?
         ))?;
         let file = utils::open_file(path)?;
-        let winget_json: WingetJson = serde_json::from_reader(file)?;
+        let reader = BufReader::new(file);
+        let winget_json: WingetJson = serde_json::from_reader(reader)?;
 
         let mut installed_packages: Vec<PackageData> = Vec::new();
         for source in winget_json.sources {
