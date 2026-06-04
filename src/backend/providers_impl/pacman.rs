@@ -1,3 +1,6 @@
+use std::fs;
+
+use alpm::{Alpm, SigLevel};
 use anyhow::Result;
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use secstr::SecVec;
@@ -47,24 +50,31 @@ impl ProviderActions for Pacman {
     }
     fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
-        let packages = command::run("pacman -Sl")?;
-        let packages: Vec<&str> = packages.split('\n').collect();
-        self.packages = packages
-            .par_iter()
-            .filter_map(|package| {
-                let list_package: Vec<&str> = package.split(' ').collect();
-                if list_package.len() < 2 {
-                    return None;
+
+        let handle = Alpm::new("/", "/var/lib/pacman")?;
+        let dbs = fs::read_dir("/var/lib/pacman/sync/")?
+            .filter_map(|dir| dir.ok())
+            .filter_map(|dir| dir.file_name().into_string().ok())
+            .filter_map(|name| {
+                if name.ends_with(".db") {
+                    Some(name.trim_end_matches(".db").to_string())
+                } else {
+                    None
                 }
-                Some(PackageData {
-                    repository: String::from(list_package[0]),
-                    name: String::from(list_package[1]),
-                    qualified_name: String::from(list_package[1]),
-                    version: String::from(list_package[2]),
-                    installed: list_package.len() == 4,
+            });
+
+        for db_name in dbs {
+            let db = handle.register_syncdb(db_name.clone(), SigLevel::NONE)?;
+            for pkg in db.pkgs() {
+                self.packages.push(PackageData {
+                    repository: db_name.clone(),
+                    name: String::from(pkg.name()),
+                    qualified_name: String::from(pkg.name()),
+                    version: pkg.version().to_string(),
+                    installed: handle.localdb().pkg(pkg.name()).is_ok(),
                 })
-            })
-            .collect();
+            }
+        }
 
         self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
         self.total = self.packages.len();
