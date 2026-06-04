@@ -2,13 +2,13 @@ use alpm::Alpm;
 use anyhow::Result;
 use flate2::read::GzDecoder;
 use secstr::SecVec;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     io::{BufReader, Read},
     ops::Sub,
     path::PathBuf,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 
 use crate::backend::{
@@ -38,7 +38,7 @@ impl Default for Paru {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 struct AurPackageShort {
     name: String,
@@ -140,7 +140,8 @@ fn download_json() -> Result<Vec<AurPackageShort>> {
     let list = serde_json::from_str::<Vec<AurPackageShort>>(&json_string)?;
 
     let path = json_path()?;
-    fs::write(path, json_string)?;
+    let file = fs::File::create(path)?;
+    serde_json::to_writer(file, &list)?;
 
     Ok(list)
 }
