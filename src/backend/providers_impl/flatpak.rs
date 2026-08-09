@@ -1,13 +1,16 @@
+use std::io::BufReader;
+
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use regex::Regex;
 use secstr::SecVec;
+use serde::{Deserialize, Serialize};
 
-use crate::backend::{
+use crate::{application, backend::{
     command::{self, CommandStream},
     package_object::PackageData,
     provider::ProviderActions,
-};
+}};
 #[derive(Clone, Debug)]
 pub struct Flatpak {
     name: String,
@@ -15,6 +18,16 @@ pub struct Flatpak {
     installed: usize,
     total: usize,
     root_required: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+struct FlatpakPackage {
+    name: String,
+    application_id: String,
+    branch: String,
+    version: String,
+    origin: String,
+    arch: String
 }
 
 impl Default for Flatpak {
@@ -48,36 +61,25 @@ impl ProviderActions for Flatpak {
     fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
 
-        let packages = command::run("flatpak list --columns=origin,application")?;
-        let installed_packages = packages
-            .split('\n')
-            .filter_map(|e| {
-                let columns = e.split('\t').collect::<Vec<&str>>();
-                if columns.len().gt(&1) {
-                    Some(format!("{} {}", columns[0], columns[1]))
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<String>>();
+        let packages = command::run("LC_ALL=C flatpak list --columns=name,application,branch,version,origin,arch -j")?;
+        let installed_packages: Vec<FlatpakPackage> = serde_json::from_str(&packages)?;
 
-        let packages = command::run("flatpak remote-ls")?;
-        let packages = packages.split('\n').collect::<Vec<&str>>();
+        let packages = command::run("LC_ALL=C flatpak remote-ls --columns=name,application,branch,version,origin,arch -j")?;
+        let packages: Vec<FlatpakPackage> = serde_json::from_str(&packages)?;
         self.packages.append(
             &mut packages
                 .par_iter()
-                .filter_map(|str_package| {
-                    let arr_package = str_package.split('\t').collect::<Vec<&str>>();
-                    if arr_package.len() < 6 {
-                        return None;
-                    }
-                    let qualified_name = format!("{} {}", arr_package[5], arr_package[1]);
+                .filter_map(|pkg| {
                     Some(PackageData {
-                        repository: String::from(arr_package[5]),
-                        name: String::from(arr_package[0]),
-                        qualified_name: qualified_name.clone(),
-                        version: String::from(arr_package[2]),
-                        installed: installed_packages.par_iter().any(|f| f.eq(&qualified_name)),
+                        repository: format!("{} {} {}", pkg.origin, pkg.branch, pkg.arch),
+                        name: pkg.name.clone(),
+                        qualified_name: format!("{} {}", pkg.name, pkg.application_id),
+                        version: pkg.version.clone(),
+                        installed: installed_packages.par_iter().any(|f| 
+                            f.application_id.eq(&pkg.application_id) && 
+                            f.branch.eq(&pkg.branch) &&
+                            f.origin.eq(&pkg.origin) &&
+                            f.arch.eq(&pkg.arch)),
                     })
                 })
                 .collect::<Vec<PackageData>>(),
