@@ -1,6 +1,7 @@
+use std::collections::HashSet;
+
 use anyhow::{Context, Result};
 use rayon::prelude::*;
-use regex::Regex;
 use secstr::SecVec;
 use serde::{Deserialize, Serialize};
 
@@ -22,7 +23,8 @@ pub struct Flatpak {
 #[derive(Serialize, Deserialize)]
 struct FlatpakPackage {
     name: String,
-    application_id: String,
+    #[serde(rename = "ref")]
+    application_ref: String,
     branch: String,
     version: String,
     origin: String,
@@ -60,50 +62,34 @@ impl ProviderActions for Flatpak {
     fn load_packages(&mut self) -> Result<()> {
         self.packages.clear();
 
-        let packages = command::run("LC_ALL=C flatpak list --columns=name,application,branch,version,origin,arch -j")?;
+        let packages: String = command::run("LC_ALL=C flatpak list --columns=name,ref,branch,version,origin,arch -j")?;
         let installed_packages: Vec<FlatpakPackage> = serde_json::from_str(&packages)?;
+        let installed_packages: HashSet<&str> = installed_packages.par_iter().map(|f| f.application_ref.as_str()).collect();
 
-        let packages = command::run("LC_ALL=C flatpak remote-ls --columns=name,application,branch,version,origin,arch -j")?;
+        let packages = command::run("LC_ALL=C flatpak remote-ls --columns=name,ref,branch,version,origin,arch -j")?;
         let packages: Vec<FlatpakPackage> = serde_json::from_str(&packages)?;
         self.packages.append(
             &mut packages
                 .par_iter()
-                .filter_map(|pkg| {
-                    Some(PackageData {
+                .map(|pkg| {
+                    PackageData {
                         repository: format!("{} {} {}", pkg.origin, pkg.branch, pkg.arch),
                         name: pkg.name.clone(),
-                        qualified_name: format!("{} {}", pkg.name, pkg.application_id),
+                        qualified_name: format!("{} {}", pkg.origin, pkg.application_ref),
                         version: pkg.version.clone(),
-                        installed: installed_packages.par_iter().any(|f| 
-                            f.application_id.eq(&pkg.application_id) && 
-                            f.branch.eq(&pkg.branch) &&
-                            f.origin.eq(&pkg.origin) &&
-                            f.arch.eq(&pkg.arch)),
-                    })
+                        installed: installed_packages.contains(pkg.application_ref.as_str()),
+                    }
                 })
                 .collect::<Vec<PackageData>>(),
         );
-        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
+
+        self.installed = installed_packages.len();
         self.total = self.packages.len();
         Ok(())
     }
     fn package_info(&self, package: String) -> Result<String> {
-        let split = package.split(' ').collect::<Vec<&str>>();
-        let remote = split[0];
-        let package_name = split[1];
-        let re = format!("[^-](\\b{remote}\\b)([^-]|$)");
-        let regex = Regex::new(&re).expect("Invalid regex");
-        let response = command::run(&format!("flatpak search {package_name}"))?;
-        let lines = response
-            .split('\n')
-            .filter(|value| regex.is_match(value))
-            .collect::<Vec<&str>>();
-        let info = if lines.is_empty() {
-            response
-        } else {
-            lines.first().context("Package Info not found")?.to_string()
-        };
-        Ok(info.replace('\t', "\n"))
+        let response = command::run(&format!("flatpak remote-info {package}"))?;
+        Ok(response)
     }
     fn install(&self, _: Option<SecVec<u8>>, package: String) -> Result<CommandStream> {
         CommandStream::new(
