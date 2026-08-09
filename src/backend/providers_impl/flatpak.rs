@@ -1,16 +1,15 @@
-use std::io::BufReader;
-
 use anyhow::{Context, Result};
 use rayon::prelude::*;
 use regex::Regex;
 use secstr::SecVec;
 use serde::{Deserialize, Serialize};
 
-use crate::{application, backend::{
+use crate::{backend::{
     command::{self, CommandStream},
     package_object::PackageData,
     provider::ProviderActions,
 }};
+
 #[derive(Clone, Debug)]
 pub struct Flatpak {
     name: String,

@@ -11,6 +11,7 @@ use crate::backend::{
     provider::ProviderActions,
     utils::pass_2_stdin,
 };
+
 #[derive(Clone, Debug)]
 pub struct Pacman {
     name: String,
@@ -66,17 +67,22 @@ impl ProviderActions for Pacman {
         for db_name in dbs {
             let db = handle.register_syncdb(db_name.clone(), SigLevel::NONE)?;
             for pkg in db.pkgs() {
+                let pkg_name = pkg.name();
+                let pkg_version = pkg.version().to_string();
+                let local_entry = handle.localdb().pkg(pkg_name).ok();
+                let installed = local_entry.is_some() && local_entry.as_ref().unwrap().version().eq(&pkg_version);
+
                 self.packages.push(PackageData {
                     repository: db_name.clone(),
-                    name: String::from(pkg.name()),
-                    qualified_name: String::from(pkg.name()),
-                    version: pkg.version().to_string(),
-                    installed: handle.localdb().pkg(pkg.name()).is_ok(),
+                    name: pkg_name.to_string(),
+                    qualified_name: pkg_name.to_string(),
+                    version: pkg_version,
+                    installed,
                 })
             }
         }
 
-        self.installed = self.packages.par_iter().filter(|&p| p.installed).count();
+        self.installed = self.packages.par_iter().filter(|p| p.installed).count();
         self.total = self.packages.len();
         Ok(())
     }
@@ -106,3 +112,4 @@ impl ProviderActions for Pacman {
         packages.is_ok()
     }
 }
+
