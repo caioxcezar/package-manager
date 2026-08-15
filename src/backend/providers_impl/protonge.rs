@@ -2,6 +2,7 @@ use crate::backend::command::CommandStream;
 use crate::backend::{api, command, package_object::PackageData, provider::ProviderActions};
 use anyhow::{anyhow, Context, Result};
 use rayon::prelude::*;
+use regex::Regex;
 use secstr::SecVec;
 use serde::Deserialize;
 use std::fs::{self, DirEntry};
@@ -24,7 +25,7 @@ struct ApiResponse {
     tag_name: String,
     body: String,
     html_url: String,
-    assets_url: String,
+    assets_url: String
 }
 
 #[derive(Deserialize, Debug)]
@@ -145,6 +146,7 @@ impl ProviderActions for ProtonGE {
 }
 impl ProtonGE {
     fn new() -> Result<Self> {
+        let regex_arch = Regex::new(r"-((aarch64)|(x86_64))").expect("Invalid regex");
         let mut protonge = ProtonGE::default();
         let proton_location = protonge.proton_location()?;
         let proton_dir = fs::read_dir(proton_location)?;
@@ -161,7 +163,7 @@ impl ProtonGE {
                 } else {
                     format!("GE-Proton{name}")
                 };
-                let version = &name[9..];
+                let version = regex_arch.replace(&name[9..], "");
                 PackageData {
                     name: name.to_owned(),
                     qualified_name: name.to_owned(),
@@ -192,13 +194,19 @@ impl ProtonGE {
             .context(format!("Package {name} not found"))
     }
     fn download(&self, package: &str) -> Result<CommandStream> {
+        let arch = if std::env::consts::ARCH == "x86_64" {
+            "aarch64"
+        } else {
+            "x86_64"
+        };
         let mut url = Err(anyhow!("URL not found"));
         let api_response = self.api_package_data(package)?;
         let assets = api::get::<Vec<ApiAssets>>(&api_response.assets_url);
         if let Ok(assets) = assets {
-            for response in assets {
-                if response.name.contains(".tar.gz") {
-                    url = Ok(response.browser_download_url);
+            for file in assets {
+                if file.name.contains(".tar.gz") && !file.name.contains(arch) {
+                    url = Ok(file.browser_download_url);
+                    break;
                 }
             }
         }

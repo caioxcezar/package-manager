@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use serde::de::DeserializeOwned;
 
 use super::command::CommandStream;
@@ -9,10 +9,19 @@ pub fn get<T: DeserializeOwned>(url: &str) -> Result<T> {
         .get(url)
         .header(reqwest::header::ACCEPT, "*/*")
         .header(reqwest::header::USER_AGENT, "PackageManager/1.0.0")
-        .send()?
-        .json::<T>()?;
+        .send()?;
 
-    Ok(resp)
+    let status = resp.status();
+    let text = resp.text()?;
+    
+    if status.is_success() {
+        serde_json::from_str::<T>(&text)
+            .map_err(|e| anyhow::anyhow!("Failed to parse success response: {e}\nBody: {text}"))
+    } else {
+        Err(anyhow!(text))
+    }
+
+    
 }
 
 pub fn get_str(url: &str) -> Result<String> {
