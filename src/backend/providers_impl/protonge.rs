@@ -146,11 +146,17 @@ impl ProviderActions for ProtonGE {
 }
 impl ProtonGE {
     fn new() -> Result<Self> {
-        let regex_arch = Regex::new(r"-((aarch64)|(x86_64))").expect("Invalid regex");
+        let regex_arch = Regex::new(r"(-aarch64)|(-x86_64)").expect("Invalid regex");
         let mut protonge = ProtonGE::default();
         let proton_location = protonge.proton_location()?;
         let proton_dir = fs::read_dir(proton_location)?;
-        let proton: Vec<String> = proton_dir.filter_map(|dir| filter_dir(dir).ok()).collect();
+        let proton: Vec<String> = proton_dir.filter_map(|dir| {
+            if let Ok(name) = filter_dir(dir) {
+                Some(regex_arch.replace(&name, "").to_string())
+            } else {
+                None
+            }
+        }).collect();
         let resp = api::get::<Vec<ApiResponse>>(&protonge.endpoint)?;
         protonge.packages_description = resp;
         protonge.packages = protonge
@@ -163,7 +169,7 @@ impl ProtonGE {
                 } else {
                     format!("GE-Proton{name}")
                 };
-                let version = regex_arch.replace(&name[9..], "");
+                let version = &name[9..];
                 PackageData {
                     name: name.to_owned(),
                     qualified_name: name.to_owned(),
